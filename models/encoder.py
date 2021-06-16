@@ -4,14 +4,14 @@ import torch.nn.functional as F
 import torchvision.models as models
 
 # 2D CNN encoder
-class ResCNNEncoder(nn.Module):
+class Encoder(nn.Module):
     def __init__(self, CNN_embed_dim = 256):
         """
             Load the pretrained ResNet-152 and replace last fc layer with embedding layer.
             Only embedding layer is trainable.
 
         """
-        super(ResCNNEncoder, self).__init__()
+        super(Encoder, self).__init__()
 
         resnet = models.resnet152(pretrained=True)
         modules = list(resnet.children())[:-1]      # delete the last fc layer.
@@ -38,7 +38,7 @@ class ResCNNEncoder(nn.Module):
 
 if __name__ == "__main__":
     t = torch.randn((2,5,3,224,224))
-    encoder = ResCNNEncoder()
+    encoder = Encoder()
     out = encoder(t)
 
     print(out.shape)
