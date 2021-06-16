@@ -37,7 +37,7 @@ class Encoder(nn.Module):
 
 
 if __name__ == "__main__":
-    t = torch.randn((2,5,3,224,224))
+    t = torch.randn((2,5,3,224,224)) # (batch, time_step, channels, img_h, img_w)
     encoder = Encoder()
     out = encoder(t)
 

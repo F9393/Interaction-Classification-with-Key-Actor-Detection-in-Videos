@@ -1,31 +1,31 @@
 import torch.nn as nn
-import torch.nn.functional as F
 
 class Decoder(nn.Module):
-    def __init__(self, CNN_embed_dim = 256, h_RNN = 256, num_classes = 8):
+    def __init__(self, CNN_embed_dim = 256, h_frameLSTM = 256, h_eventLSTM = 256, num_classes = 8):
         super(Decoder, self).__init__()
 
-        self.RNN_input_size = CNN_embed_dim
-        self.h_RNN = h_RNN                 # RNN hidden nodes
+        self.CNN_embed_dim = CNN_embed_dim
+        self.h_frameLSTM = h_frameLSTM                 # RNN hidden nodes
+        self.h_eventLSTM = h_eventLSTM
         self.num_classes = num_classes
 
         self.frameLSTM = nn.LSTM(
-            input_size = self.RNN_input_size,
-            hidden_size = self.h_RNN,        
+            input_size = self.CNN_embed_dim,
+            hidden_size = self.h_frameLSTM,        
             num_layers = 1,       
             batch_first = True,       # input & output has batch size as 1st dimension. i.e. (batch, time_step, input_size)
             bidirectional = True
         )
 
         self.eventLSTM = nn.LSTM(
-            input_size = 2 * self.h_RNN,
-            hidden_size = self.h_RNN,        
+            input_size = 2 * self.h_frameLSTM, # since input is from bidirectional LSTM
+            hidden_size = self.h_eventLSTM,        
             num_layers = 1,       
             batch_first = True,       # input & output has batch size as 1st dimension. i.e. (batch, time_step, input_size)
             bidirectional = False
         )
 
-        self.fc = nn.Linear(self.h_RNN, self.num_classes)
+        self.fc = nn.Linear(self.h_eventLSTM, self.num_classes)
 
     def forward(self, x):
         """ 
@@ -53,6 +53,6 @@ class Decoder(nn.Module):
 if __name__ == "__main__":
     import torch
     inp = torch.randn((9,5,10)) # (batch,time_step,cnn_embedding_dim)
-    dec = Decoder(CNN_embed_dim=10, h_RNN=2)
+    dec = Decoder(CNN_embed_dim = 10, h_frameLSTM = 4, h_eventLSTM = 6)
     out = dec(inp)
     print(out.shape)
