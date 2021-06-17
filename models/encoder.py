@@ -35,6 +35,16 @@ class Encoder(nn.Module):
 
         return cnn_embed_seq
 
+        """
+        Can also do for possible speedup - 
+        B,T,C,H,W = x.size()
+        x = x.view(-1,C,H,W)        
+        out = self.resnet(x)    
+        out = self.embedding_layer(out)  
+        out = F.relu(out)
+        out = out.view(B,T,-1)   
+        """
+
 
 if __name__ == "__main__":
     t = torch.randn((2,5,3,224,224)) # (batch, time_step, channels, img_h, img_w)
