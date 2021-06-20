@@ -83,7 +83,7 @@ class SBU_Dataset(data.Dataset):
             start_idx = (video_len - self.select_frames) // 2
             end_idx = start_idx + self.select_frames
 
-            frame_pths = glob.glob(f'{video_pth}/rgb*')[start_idx : end_idx]
+            frame_pths = sorted(glob.glob(f'{video_pth}/rgb*'))[start_idx : end_idx]
             loaded_imgs = []
             for frame_pth in frame_pths:
                 frame = Image.open(frame_pth).convert('RGB')
@@ -93,6 +93,10 @@ class SBU_Dataset(data.Dataset):
             loaded_videos.append(loaded_imgs)
 
         assert len(loaded_videos) == len(self.folders), "error in reading images of videos"
+        
+        with open(os.path.join(os.path.dirname(__file__), f'sbu_{self.mode}.pkl'), "wb") as f:
+            pickle.dump(loaded_videos, f)
+
         return loaded_videos
 
     def __len__(self):
@@ -127,6 +131,7 @@ if __name__ == "__main__":
     print(f'y shape {sample_y}')
 
     print(f'first 10 train set folders : {train_set.folders[:10]}')
+    print(f'first 10 train set video lengths : {train_set.video_len[:10]}')
     print(f'first 10 validation set folders : {valid_set.folders[:10]}')
 
 
