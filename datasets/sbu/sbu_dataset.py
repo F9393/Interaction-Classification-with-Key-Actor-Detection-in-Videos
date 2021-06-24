@@ -7,7 +7,7 @@ import glob
 import pickle
 
 class SBU_Dataset(data.Dataset):
-    def __init__(self, set_paths, select_frames, mode, transform=None):
+    def __init__(self, set_paths, select_frames, mode, transform=None, fold_no = None):
         """
         Args
             set_paths : paths to the participant sets (e.g '../../s0102')
@@ -23,19 +23,28 @@ class SBU_Dataset(data.Dataset):
         self.transform = transform
         self.mode = mode
         self.loaded_videos = None
+        self.fold_no = fold_no
     
         if mode == 'train':
-            loaded_dataset_path = os.path.join(os.path.dirname(__file__), 'sbu_train.pkl')
+            if fold_no is None:
+                loaded_dataset_path = os.path.join(os.path.dirname(__file__), f'sbu_train.pkl')
+            else:
+                loaded_dataset_path = os.path.join(os.path.dirname(__file__), f'sbu_train_fold={fold_no}.pkl')
             if os.path.exists(loaded_dataset_path):
                 with open(loaded_dataset_path, 'rb') as f:
                     self.loaded_videos = pickle.load(f)
         if mode == 'valid':
-            loaded_dataset_path = os.path.join(os.path.dirname(__file__), 'sbu_valid.pkl')
+            if fold_no is None:
+                loaded_dataset_path = os.path.join(os.path.dirname(__file__), f'sbu_valid.pkl')
+            else:
+                loaded_dataset_path = os.path.join(os.path.dirname(__file__), f'sbu_valid_fold={fold_no}.pkl')
             if os.path.exists(loaded_dataset_path):
                 with open(loaded_dataset_path, 'rb') as f:
                     self.loaded_videos = pickle.load(f)
         if self.loaded_videos is None:
             self.loaded_videos = self.load_videos()
+            with open(loaded_dataset_path, "wb") as f:
+                pickle.dump(self.loaded_videos, f)
 
     def get_video_data(self, set_paths):
         """
@@ -93,9 +102,6 @@ class SBU_Dataset(data.Dataset):
             loaded_videos.append(loaded_imgs)
 
         assert len(loaded_videos) == len(self.folders), "error in reading images of videos"
-        
-        with open(os.path.join(os.path.dirname(__file__), f'sbu_{self.mode}.pkl'), "wb") as f:
-            pickle.dump(loaded_videos, f)
 
         return loaded_videos
 
@@ -106,8 +112,6 @@ class SBU_Dataset(data.Dataset):
         X = self.loaded_videos[index]   
         y = torch.LongTensor([self.labels[index]])            
         return X, y
-
-
 
 
 if __name__ == "__main__":
