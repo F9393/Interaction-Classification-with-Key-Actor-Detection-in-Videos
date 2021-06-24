@@ -26,7 +26,7 @@ class CheckPointer:
             if not os.path.exists(self.save_dir):
                 os.makedirs(self.save_dir)
 
-    def get_save_dict(self, **kwargs):
+    def get_save_dict(self):
         data = {}
 
         data['best_metrics'] = self.best_metrics
@@ -43,11 +43,12 @@ class CheckPointer:
         if self.scheduler is not None:
             data["scheduler"] = self.scheduler.state_dict()
 
-        data.update(kwargs)
-
         return data
 
-    def save_model(self, name, save_data):
+    def save_dict(self, name, save_data):
+        """
+        saves 'save_dict' with name 'name'
+        """
         if not self.save_dir:
             return
         
@@ -59,18 +60,26 @@ class CheckPointer:
         torch.save(save_data, save_file)
 
     def save_checkpoint(self, current_metrics):
+        """
+        saves best and last checkpoints
+        """
         save_data = self.get_save_dict()
 
-        self.save_model(name = CheckPointer._last_checkpoint_name, save_data = save_data)
+        self.save_dict(name = CheckPointer._last_checkpoint_name, save_data = save_data)
         if current_metrics[self.watch_metric] > self.best_metrics[self.watch_metric]:
             self.best_metrics = current_metrics
-            self.save_model(name = CheckPointer._best_checkpoint_name, save_data = save_data)
+            self.save_dict(name = CheckPointer._best_checkpoint_name, save_data = save_data)
 
-    def load(self, use_latest = True):
-        load_file = self.has_checkpoint(use_latest)
-        if not load_file:
-            print("No checkpoint found.")
-            return {}
+            with open(os.path.join(self.save_dir, "best_results.txt"), "w") as f:
+                for key,val in self.best_metrics.items():
+                    f.write(f"{key} : {val}\n")
+
+    def load_checkpoint(self, load_file = None, checkpoint_type = "best"):
+        if load_file is None:
+            load_file = self.has_checkpoint(checkpoint_type)
+            if not load_file:
+                print("No checkpoint found.")
+                return {}
 
         print("Loading checkpoint from {}".format(load_file))
 
@@ -97,14 +106,17 @@ class CheckPointer:
 
         return checkpoint
 
-    def has_checkpoint(self, use_latest):
-        if use_latest:
+    def has_checkpoint(self, checkpoint_type):
+        if checkpoint_type == "last":
             files = sorted(glob.glob(f'{self.save_dir}/*{CheckPointer._last_checkpoint_name}*'))
             if not files:
                 return False
-        else:
+        elif checkpoint_type == "best":
             files = sorted(glob.glob(f'{self.save_dir}/*{CheckPointer._best_checkpoint_name}*'))
             if not files:
                 return False
+        else:
+            print(f"'{checkpoint_type}' is invalid type. Must be one of 'best' or 'last'")
+            return False
         return files[-1]
 
