@@ -38,8 +38,10 @@ class Encoder(nn.Module):
         """
         Can also do for possible speedup - 
         B,T,C,H,W = x.size()
-        x = x.view(-1,C,H,W)        
-        out = self.resnet(x)    
+        x = x.view(-1,C,H,W)      
+        with torch.no_grad():  
+            out = self.resnet(x)    
+        out = torch.squeeze(out)
         out = self.embedding_layer(out)  
         out = F.relu(out)
         out = out.view(B,T,-1)   
