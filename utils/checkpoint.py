@@ -63,6 +63,10 @@ class CheckPointer:
         """
         saves best and last checkpoints
         """
+
+        if not self.save_dir:
+            return
+            
         is_best = False
         if current_metrics[self.watch_metric] > self.best_metrics[self.watch_metric]:
             is_best = True

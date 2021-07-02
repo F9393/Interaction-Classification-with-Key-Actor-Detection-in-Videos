@@ -19,21 +19,31 @@ class Encoder(nn.Module):
         self.embedding_layer = nn.Linear(resnet.fc.in_features, CNN_embed_dim)
         
     def forward(self, x):
-        cnn_embed_seq = []
-        for t in range(x.size(1)):        
-            with torch.no_grad():
-                out = self.resnet(x[:, t, :, :, :])     # ResNet
-                out = out.view(out.size(0), -1)         # flatten output of conv
+        # cnn_embed_seq = []
+        # for t in range(x.size(1)):        
+        #     with torch.no_grad():
+        #         out = self.resnet(x[:, t, :, :, :])     # ResNet
+        #         out = out.view(out.size(0), -1)         # flatten output of conv
 
-            out = self.embedding_layer(out)                
-            out= F.relu(out)
+        #     out = self.embedding_layer(out)                
+        #     out= F.relu(out)
 
-            cnn_embed_seq.append(out)
+        #     cnn_embed_seq.append(out)
 
-        # swap time and batch dimensions. Resulting shape is (batch,frames,embed_dim)
-        cnn_embed_seq = torch.stack(cnn_embed_seq, dim=0).transpose_(0, 1) 
+        # # swap time and batch dimensions. Resulting shape is (batch,frames,embed_dim)
+        # cnn_embed_seq = torch.stack(cnn_embed_seq, dim=0).transpose_(0, 1) 
 
-        return cnn_embed_seq
+        # return cnn_embed_seq
+
+        B,T,C,H,W = x.size()
+        x = x.view(-1,C,H,W)      
+        with torch.no_grad():  
+            out = self.resnet(x)    
+        out = torch.squeeze(out)
+        out = self.embedding_layer(out)  
+        out = F.relu(out)
+        out = out.view(B,T,-1) 
+        return out
 
         """
         Can also do for possible speedup - 
@@ -45,6 +55,7 @@ class Encoder(nn.Module):
         out = self.embedding_layer(out)  
         out = F.relu(out)
         out = out.view(B,T,-1)   
+        return out
         """
 
 

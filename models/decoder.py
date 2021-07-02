@@ -1,13 +1,11 @@
 import torch.nn as nn
 
-class Decoder(nn.Module):
-    def __init__(self, CNN_embed_dim = 256, h_frameLSTM = 256, h_eventLSTM = 256, num_classes = 8):
-        super(Decoder, self).__init__()
+class FrameLSTM(nn.Module):
+    def __init__(self, CNN_embed_dim = 256, h_frameLSTM = 256):
+        super(FrameLSTM, self).__init__()
 
         self.CNN_embed_dim = CNN_embed_dim
-        self.h_frameLSTM = h_frameLSTM                 # RNN hidden nodes
-        self.h_eventLSTM = h_eventLSTM
-        self.num_classes = num_classes
+        self.h_frameLSTM = h_frameLSTM                
 
         self.frameLSTM = nn.LSTM(
             input_size = self.CNN_embed_dim,
@@ -17,6 +15,32 @@ class Decoder(nn.Module):
             bidirectional = True
         )
 
+        for name, param in self.frameLSTM.named_parameters(): # use xavier_normal initilization
+            if 'bias' in name:
+                nn.init.constant_(param, 0.0)
+            elif 'weight' in name:
+                nn.init.xavier_normal_(param)
+
+    def forward(self, x):
+        """ 
+            f_out : shape (batch, time_step, 2 * hidden_size)
+            f_h_n : shape (2 * n_layers, batch, hidden_size)
+            f_h_c : shape (2 * n_layers, batch, hidden_size) 
+        """
+
+        self.frameLSTM.flatten_parameters()
+        f_out, (f_h_n, f_h_c) = self.frameLSTM(x, None)  
+
+        return f_out, (f_h_n, f_h_c)
+
+
+class EventLSTM(nn.Module):
+    def __init__(self, h_frameLSTM = 256, h_eventLSTM = 256):
+        super(EventLSTM, self).__init__()
+
+        self.h_frameLSTM = h_frameLSTM         
+        self.h_eventLSTM = h_eventLSTM       
+
         self.eventLSTM = nn.LSTM(
             input_size = 2 * self.h_frameLSTM, # since input is from bidirectional LSTM
             hidden_size = self.h_eventLSTM,        
@@ -25,34 +49,20 @@ class Decoder(nn.Module):
             bidirectional = False
         )
 
-        self.fc = nn.Linear(self.h_eventLSTM, self.num_classes)
+        for name, param in self.eventLSTM.named_parameters(): # use xavier_normal initilization
+            if 'bias' in name:
+                nn.init.constant_(param, 0.0)
+            elif 'weight' in name:
+                nn.init.xavier_normal_(param)
 
     def forward(self, x):
         """ 
-            f_out : shape (batch, time_step, 2 * hidden_size)
-            f_h_n : shape (2 * n_layers, batch, hidden_size)
-            f_h_c : shape (2 * n_layers, batch, hidden_size) 
-            
             e_out : shape (batch, time_step, hidden_size)
             e_h_n : shape (n_layers, batch, hidden_size)
             e_h_c : shape (n_layers, batch, hidden_size) 
         """
 
-        self.frameLSTM.flatten_parameters()
-        f_out, (f_h_n, f_h_c) = self.frameLSTM(x, None)  
-
         self.eventLSTM.flatten_parameters()
-        e_out, (e_h_n, e_h_c) = self.eventLSTM(f_out, None)
+        e_out, (e_h_n, e_h_c) = self.eventLSTM(x, None)
 
-        B,T,H = e_out.shape # batch,time_step,hidden_size
-        
-        out = self.fc(e_out.reshape(-1,H)).view(B,T,-1) # pass output hidden states of all time steps to the same FC layer (will be needed for hinge loss)
-
-        return out[:,-1,:] # return last time step for now
-
-if __name__ == "__main__":
-    import torch
-    inp = torch.randn((9,5,10)) # (batch,time_step,cnn_embedding_dim)
-    dec = Decoder(CNN_embed_dim = 10, h_frameLSTM = 4, h_eventLSTM = 6)
-    out = dec(inp)
-    print(out.shape)
+        return e_out, (e_h_n, e_h_c)
