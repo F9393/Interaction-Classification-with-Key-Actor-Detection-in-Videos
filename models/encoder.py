@@ -17,6 +17,10 @@ class Encoder(nn.Module):
         modules = list(resnet.children())[:-1]      # delete the last fc layer.
         self.resnet = nn.Sequential(*modules)
         self.embedding_layer = nn.Linear(resnet.fc.in_features, CNN_embed_dim)
+
+        # initialize embedding layer
+        # nn.init.constant_(self.embedding_layer.bias, 0.0)
+        # nn.init.xavier_normal_(self.embedding_layer.weight)
         
     def forward(self, x):
         # cnn_embed_seq = []
@@ -44,19 +48,6 @@ class Encoder(nn.Module):
         out = F.relu(out)
         out = out.view(B,T,-1) 
         return out
-
-        """
-        Can also do for possible speedup - 
-        B,T,C,H,W = x.size()
-        x = x.view(-1,C,H,W)      
-        with torch.no_grad():  
-            out = self.resnet(x)    
-        out = torch.squeeze(out)
-        out = self.embedding_layer(out)  
-        out = F.relu(out)
-        out = out.view(B,T,-1)   
-        return out
-        """
 
 
 if __name__ == "__main__":
