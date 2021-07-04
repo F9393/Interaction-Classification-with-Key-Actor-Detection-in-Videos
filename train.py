@@ -15,10 +15,15 @@ from utils.checkpoint import CheckPointer
 from utils.display import display_sample_images, display_model_graph
 from utils.training_utils import repeat_k_times
 
-from models.models import Model1
+from models.models import Model1, Model2
 
 from datasets.sbu.train_test_split import train_sets, test_sets # generates K-fold train and test sets
-from datasets.sbu.sbu_dataset import  SBU_Dataset
+from datasets.sbu.sbu_dataset import  M1_SBU_Dataset, M2_SBU_Dataset
+
+
+# enforce cuda rnn determinism
+# os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+
 
 # torch.manual_seed(0)
 
@@ -32,29 +37,36 @@ class CFG:
     """
         Defines cofiguration parameters
     """
+    class Training:
+        select_frame = 10   
+        num_epochs = 200      
+        batch_size = 16
+        num_workers = 4
+        learning_rate = 1e-5
+        lr_patience = 10
+        log_interval = 1  
+        save_checkpoint = True
+        save_tensorboard = True
+        save_model_path = '/usr/local/data01/rohitram/sbu-snapshots/model1/sbu_5times(lstm_weights=xavier_normal,lstm_forget_bias=1,no_cuda_determinism)'
+        save_tensorboard_dir = '/usr/local/data01/rohitram/sbu-snapshots/model1/runs_5times(lstm_weights=xavier_normal,lstm_forget_bias=1,no_cuda_determinism)'
+        model = 'model1'
+        
 
-    # EncoderCNN architecture
-    res_size = 224        # ResNet image size
-    CNN_embed_dim = 256
+    class Model1:
+        # EncoderCNN architecture
+        res_size = 224        # ResNet image size
+        CNN_embed_dim = 256
 
-    # DecoderRNN architecture
-    h_frameLSTM = 256 # hidden state dimension for frame-level LSTM
-    h_eventLSTM = 256 # hidden state dimension for event-level LSTM
-    num_classes = 8 # number of target category
+        # DecoderRNN architecture
+        h_frameLSTM = 256 # hidden state dimension for frame-level LSTM
+        h_eventLSTM = 256 # hidden state dimension for event-level LSTM
+        num_classes = 8 # number of target category
 
-    # training parameters        
-    select_frame = 10   # Select given number of middle frames (left-biased). For sbu-dataset this has to be <=10. 
-    num_epochs = 200         # training epochs
-    batch_size = 16
-    num_workers = 4
-    learning_rate = 1e-5
-    lr_patience = 10
-    log_interval = 1   # interval for displaying training info
+    class Model2:
+        input_pose_size = 30
+        h_eventLSTM = 256 # hidden state dimension for event-level LSTM
+        num_classes = 8 # number of target category
 
-    save_checkpoint = True
-    save_tensorboard = True
-    save_model_path = '/usr/local/data01/rohitram/hpc-snapshots/sbu_snapshots_5times_xavier_normal'
-    save_tensorboard_dir = '/usr/local/data01/rohitram/hpc-snapshots/runs_5times_xavier_normal'
 
 
 def evaluate(model, device, loader):
@@ -109,34 +121,46 @@ def train(train_set, valid_set, fold_no = None, run_no = None):
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
     default_log_dir = current_time
 
-    save_model_dir = os.path.join(CFG.save_model_path, save_model_subdir)
-    save_tensorboard_dir = os.path.join(CFG.save_tensorboard_dir, save_model_subdir, default_log_dir)
+    save_model_dir = os.path.join(CFG.Training.save_model_path, save_model_subdir)
+    save_tensorboard_dir = os.path.join(CFG.Training.save_tensorboard_dir, save_model_subdir, default_log_dir)
     
-    params = {'batch_size': CFG.batch_size, 'shuffle': True, 'num_workers': CFG.num_workers, 'pin_memory': True} if use_cuda else {}
+    params = {'batch_size': CFG.Training.batch_size, 'shuffle': True, 'num_workers': CFG.Training.num_workers, 'pin_memory': True} if use_cuda else {}
     train_loader = data.DataLoader(train_set, **params)
     valid_loader = data.DataLoader(valid_set, **params)
 
-    model = Model1(CNN_embed_dim =  CFG.CNN_embed_dim, h_frameLSTM = CFG.h_frameLSTM, h_eventLSTM = CFG.h_eventLSTM, num_classes = CFG.num_classes).to(device)
+    if CFG.Training.model == 'model1':
+        model = Model1(CNN_embed_dim =  CFG.Model1.CNN_embed_dim, h_frameLSTM = CFG.Model1.h_frameLSTM, h_eventLSTM = CFG.Model1.h_eventLSTM, num_classes = CFG.Model1.num_classes).to(device)
+    elif CFG.Training.model == 'model2':
+        model = Model2(input_size=CFG.Model2.input_pose_size, h_eventLSTM=CFG.Model2.h_eventLSTM)
+    else:
+        raise NotImplementedError("invalid model")
 
     # Parallelize model to multiple GPUs
     if torch.cuda.device_count() > 1:
         print("Using", torch.cuda.device_count(), "GPUs!")
         model = nn.DataParallel(model)
 
+        if CFG.Training.model == 'model1':
         # Combine all EncoderCNN + DecoderRNN parameters (don't include feature_extractor of encoder (e.g resnet) as we are not training its params)
-        crnn_params = list(model.module.encoder.embedding_layer.parameters()) + list(model.module.frameLSTM.parameters()) \
-                    + list(model.module.eventLSTM.parameters()) + list(model.module.fc.parameters())
+            crnn_params = list(model.module.encoder.embedding_layer.parameters()) + list(model.module.frameLSTM.parameters()) \
+                        + list(model.module.eventLSTM.parameters()) + list(model.module.fc.parameters())
+        elif CFG.Training.model == 'model2':
+            crnn_params = model.module.parameters()
+
     elif torch.cuda.device_count() == 1:
         print("Using", torch.cuda.device_count(), "GPU!")
         # Combine all EncoderCNN + DecoderRNN parameters (don't include feature_extractor of encoder (e.g resnet) as we are not training its params)
-        crnn_params = list(model.encoder.embedding_layer.parameters()) + list(model.frameLSTM.parameters()) \
-                    + list(model.eventLSTM.parameters()) + list(model.fc.parameters())
+        if CFG.Training.model == 'model1':
+            crnn_params = list(model.encoder.embedding_layer.parameters()) + list(model.frameLSTM.parameters()) \
+                        + list(model.eventLSTM.parameters()) + list(model.fc.parameters())
+        elif CFG.Training.model == 'model2':
+            crnn_params = model.parameters()
 
-    if CFG.save_tensorboard:
+    if CFG.Training.save_tensorboard:
         writer = SummaryWriter(log_dir = save_tensorboard_dir)
 
-    optimizer = torch.optim.Adam(crnn_params, lr = CFG.learning_rate)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode = 'max', patience = CFG.lr_patience)
+    optimizer = torch.optim.Adam(crnn_params, lr = CFG.Training.learning_rate)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode = 'max', patience = CFG.Training.lr_patience)
     batch_count = 0
 
 
@@ -144,7 +168,7 @@ def train(train_set, valid_set, fold_no = None, run_no = None):
         "val_accuracy" : -1,
         "val_loss" : 1e6 
     }
-    if not CFG.save_checkpoint:
+    if not CFG.Training.save_checkpoint:
         save_model_dir = None
     checkpointer = CheckPointer(models = [model], optimizer = optimizer, scheduler = scheduler, 
                                 save_dir = save_model_dir, best_metrics = best_metrics, watch_metric = "val_accuracy")
@@ -157,7 +181,7 @@ def train(train_set, valid_set, fold_no = None, run_no = None):
     # train_log_file.write(f'starting pytorch seed is {starting_seed}\n\n')
 
 
-    for epoch in range(CFG.num_epochs): 
+    for epoch in range(CFG.Training.num_epochs): 
         model.train()
         N_count = 0   # counting total trained sample in one epoch
         epoch_start_time = timeit.default_timer()
@@ -179,21 +203,18 @@ def train(train_set, valid_set, fold_no = None, run_no = None):
 
             batch_count += 1
 
-            if CFG.save_tensorboard:
+            if CFG.Training.save_tensorboard:
                 writer.add_scalar('Loss/train', loss.item(), batch_count)  
 
             batch_end_time = timeit.default_timer()
 
             # show information
-            if (batch_idx + 1) % CFG.log_interval == 0:
+            if (batch_idx + 1) % CFG.Training.log_interval == 0:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tTime:{:.3f}'.format(
                     epoch + 1, N_count, len(train_loader.dataset), 100. * (batch_idx + 1) / len(train_loader), loss.item(), batch_end_time - batch_start_time))     
             # train_log_file.write('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\n'.format(
             #         epoch + 1, N_count, len(train_loader.dataset), 100. * (batch_idx + 1) / len(train_loader), loss.item()))
 
-
-
-         
         
         train_score, train_loss = evaluate(model, device, train_loader)
         val_score, val_loss = evaluate(model, device, valid_loader)
@@ -203,7 +224,7 @@ def train(train_set, valid_set, fold_no = None, run_no = None):
         # train_log_file.write('\nTrain set : Average loss: {:.4f}, Accuracy: {:.6f}\n'.format(train_loss, train_score))
         # train_log_file.write('Val set : Average loss: {:.4f}, Accuracy: {:.6f}\n'.format(val_loss, val_score))
 
-        if CFG.save_tensorboard:
+        if CFG.Training.save_tensorboard:
             writer.add_scalar(f'Accuracy/train', train_score, epoch + 1)
             writer.add_scalar(f'Accuracy/val', val_score, epoch + 1)
             writer.add_scalar(f'Loss/val', val_loss, epoch + 1)
@@ -222,25 +243,29 @@ def train(train_set, valid_set, fold_no = None, run_no = None):
 
 
 def main():
-    transform = transforms.Compose([transforms.Resize([CFG.res_size, CFG.res_size]),
+    transform = transforms.Compose([transforms.Resize([CFG.Model1.res_size, CFG.Model1.res_size]),
                                 transforms.ToTensor(),
                                 transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
 
 
     for fold_no in range(5):
-        train_set = SBU_Dataset(train_sets[fold_no], CFG.select_frame, mode='train', transform=transform, fold_no = fold_no+1)
-        valid_set = SBU_Dataset(test_sets[fold_no], CFG.select_frame, mode='valid', transform=transform, fold_no = fold_no+1)
+        if CFG.Training.model == 'model1':
+            train_set = M1_SBU_Dataset(train_sets[fold_no], CFG.Training.select_frame, mode='train', transform=transform, fold_no = fold_no+1)
+            valid_set = M1_SBU_Dataset(test_sets[fold_no], CFG.Training.select_frame, mode='valid', transform=transform, fold_no = fold_no+1)
+        elif CFG.Training.model == 'model2':
+            train_set = M2_SBU_Dataset(train_sets[fold_no], CFG.Training.select_frame, mode='train', transform=transform, fold_no = fold_no+1)
+            valid_set = M2_SBU_Dataset(test_sets[fold_no], CFG.Training.select_frame, mode='valid', transform=transform, fold_no = fold_no+1)
 
         result_metrics = train(train_set = train_set, valid_set = valid_set, fold_no = fold_no + 1)
-        with open(os.path.join(CFG.save_model_path, f"fold={fold_no+1}", "best_results.txt"), "w") as f:
+        with open(os.path.join(CFG.Training.save_model_path, f"fold={fold_no+1}", "best_results.txt"), "w") as f:
             for key,val in result_metrics.items():
                 f.write(f"{key} : {val}\n")
 
     # fold_no = int(args.fold) 
     # run_no = int(args.run)
 
-    # train_set = SBU_Dataset(train_sets[fold_no], CFG.select_frame, mode='train', transform=transform, fold_no = fold_no+1)
-    # valid_set = SBU_Dataset(test_sets[fold_no], CFG.select_frame, mode='valid', transform=transform, fold_no = fold_no+1)
+    # train_set = M1_SBU_Dataset(train_sets[fold_no], CFG.select_frame, mode='train', transform=transform, fold_no = fold_no+1)
+    # valid_set = M1_SBU_Dataset(test_sets[fold_no], CFG.select_frame, mode='valid', transform=transform, fold_no = fold_no+1)
 
     # result_metrics = train(train_set = train_set, valid_set = valid_set, fold_no = fold_no + 1, run_no = args.run)
     # with open(os.path.join(CFG.save_model_path, f"fold={fold_no+1}", "best_results.txt"), "w") as f:
