@@ -1,6 +1,7 @@
 import os
 from PIL import Image
 import torch
+import torchvision.transforms as transforms
 from torch.utils import data
 from tqdm import tqdm
 import glob
@@ -12,7 +13,8 @@ if not os.path.exists(folds_cache_path):
     os.makedirs(folds_cache_path)
 
 class SBU_Dataset(data.Dataset):
-    def __init__(self, set_paths, select_frames, mode, transform=None, fold_no = None):
+
+    def __init__(self, set_paths, select_frames, mode, resize = 224, fold_no = None):
         """
         Args
             set_paths : paths to the participant sets (e.g '../../s0102')
@@ -25,11 +27,13 @@ class SBU_Dataset(data.Dataset):
 
         self.folders, self.labels, self.video_len = list(zip(*self.get_video_data(set_paths)))
         self.select_frames = select_frames   
-        self.transform = transform
         self.mode = mode
         self.loaded_videos = None
         self.fold_no = fold_no
-    
+        self.transform = transforms.Compose([transforms.Resize([resize, resize]),
+                            transforms.ToTensor(),
+                            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+
         if mode == 'train':
             if fold_no is None:
                 loaded_dataset_path = os.path.join(folds_cache_path, f'sbu_train.pkl')

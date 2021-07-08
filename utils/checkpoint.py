@@ -1,5 +1,6 @@
 import torch
 from torch.nn.parallel import DistributedDataParallel
+from datetime import datetime
 import os
 import glob
 
@@ -129,3 +130,46 @@ class CheckPointer:
             return False
         return files[-1]
 
+def get_save_directories(CFG, fold_no, run_no):
+    if CFG.training.deterministic:
+        d = 'T'
+        sd = CFG.training.pytorch_seed
+    else:
+        d = 'F'
+        sd = 'default'
+
+    model = getattr(CFG, CFG.training.model)
+    # print(model)
+    if 'frameLSTM' in model:
+        if 'winit' not in model.frameLSTM or model.frameLSTM.winit is None:
+            framew = 'default'
+        else:
+            framew = model.frameLSTM.winit
+        if 'forget_gate_bias' not in model.frameLSTM or model.frameLSTM.forget_gate_bias is None:
+            frame_forget_bias = 'default'
+        else:    
+            frame_forget_bias = model.frameLSTM.forget_gate_bias
+    if 'eventLSTM' in model:
+        if 'winit' not in model.eventLSTM or model.eventLSTM.winit is None:
+            eventw = 'default'
+        else:
+            eventw = model.eventLSTM.winit
+        if 'forget_gate_bias' not in model.eventLSTM or model.eventLSTM.forget_gate_bias is None:
+            event_forget_bias = 'default'
+        else:    
+            event_forget_bias = model.eventLSTM.forget_gate_bias
+    lr = CFG.training.learning_rate
+    current_time = datetime.now().strftime('%b%d_%H-%M-%S')
+
+    save_model_subdir = CFG.training.model
+    save_model_subdir = os.path.join(save_model_subdir, f"d={d},seed={sd},framew={framew},framefb={frame_forget_bias},eventw={eventw},eventfb={event_forget_bias}")
+
+    if fold_no is not None:
+        save_model_subdir =  os.path.join(save_model_subdir, f"fold={fold_no}")
+    if run_no is not None:
+        save_model_subdir =  os.path.join(save_model_subdir, f"run={run_no}")
+
+    save_model_dir = os.path.join(CFG.training.save_model_path, save_model_subdir, current_time)
+    save_tensorboard_dir = os.path.join(CFG.training.save_tensorboard_dir, save_model_subdir, current_time)
+
+    return (save_model_dir, save_tensorboard_dir)

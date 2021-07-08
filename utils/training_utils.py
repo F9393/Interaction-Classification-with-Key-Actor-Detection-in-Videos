@@ -7,7 +7,7 @@ def repeat_k_times(k):
                 fold_no = None
             results = []
             for i in range(k):
-                best_metrics = train(train_set = kwargs['train_set'], valid_set = kwargs['valid_set'], fold_no = fold_no, run_no = i+1)
+                best_metrics = train(CFG = kwargs['CFG'], train_set = kwargs['train_set'], valid_set = kwargs['valid_set'], fold_no = fold_no, run_no = i+1)
                 results.append(best_metrics)
             print(f'\nAll run results : {results}')
             avg_metrics = {key:0 for key in best_metrics.keys()}

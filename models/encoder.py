@@ -16,6 +16,8 @@ class Encoder(nn.Module):
         resnet = models.resnet152(pretrained=True)
         modules = list(resnet.children())[:-1]      # delete the last fc layer.
         self.resnet = nn.Sequential(*modules)
+        self.resnet.eval() ## use pretrained calculated running_stats
+
         self.embedding_layer = nn.Linear(resnet.fc.in_features, CNN_embed_dim)
 
         # initialize embedding layer
