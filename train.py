@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import timeit
+from datetime import datetime
 
 import torch
 import torch.nn as nn
@@ -13,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 from omegaconf import DictConfig, OmegaConf
 import hydra
 
-from utils.checkpoint import CheckPointer, get_save_directories
+from utils.checkpoint import CheckPointer, get_save_directory
 from utils.display import display_sample_images, display_model_graph
 from utils.training_utils import repeat_k_times
 from models.models import Model1, Model2
@@ -43,7 +44,7 @@ def evaluate(model, device, loader):
     return val_score, val_loss
 
 
-def train(CFG, train_set, valid_set, fold_no = None, run_no = None):
+def train(CFG, train_set, valid_set, save_model_subdir, fold_no = None, run_no = None):
 
     if CFG.training.deterministic:
         # enforce full determinism
@@ -57,7 +58,18 @@ def train(CFG, train_set, valid_set, fold_no = None, run_no = None):
     use_cuda = torch.cuda.is_available()                  
     device = torch.device("cuda" if use_cuda else "cpu")  
 
-    save_model_dir, save_tensorboard_dir = get_save_directories(CFG, fold_no, run_no)
+    if fold_no is not None:
+        save_model_subdir = os.path.join(save_model_subdir, f"fold={fold_no}")
+    if run_no is not None:
+        save_model_subdir = os.path.join(save_model_subdir, f"run={run_no}")
+
+    current_time = datetime.now().strftime("%b%d_%H-%M-%S")
+    save_model_dir = os.path.join(
+        CFG.training.save_model_path, save_model_subdir, current_time
+    )
+    save_tensorboard_dir = os.path.join(
+        CFG.training.save_tensorboard_dir, save_model_subdir, current_time
+    )
     
     params = CFG.training.dataloader if use_cuda else {}
     train_loader = data.DataLoader(train_set, **params)
@@ -95,7 +107,7 @@ def train(CFG, train_set, valid_set, fold_no = None, run_no = None):
         writer = SummaryWriter(log_dir = save_tensorboard_dir)
 
     optimizer = torch.optim.Adam(crnn_params, lr = CFG.training.learning_rate)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode = 'max', patience = CFG.training.lr_patience)
+    # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode = 'max', patience = CFG.training.lr_patience)
     batch_count = 0
 
 
@@ -105,7 +117,7 @@ def train(CFG, train_set, valid_set, fold_no = None, run_no = None):
     }
     if not CFG.training.save_checkpoint:
         save_model_dir = None
-    checkpointer = CheckPointer(models = [model], optimizer = optimizer, scheduler = scheduler, 
+    checkpointer = CheckPointer(models = [model], optimizer = optimizer, scheduler = None, 
                                 save_dir = save_model_dir, best_metrics = best_metrics, watch_metric = "val_accuracy")
     
     # display_sample_images(train_loader, writer)
@@ -154,7 +166,7 @@ def train(CFG, train_set, valid_set, fold_no = None, run_no = None):
             writer.add_scalar(f'Accuracy/val', val_score, epoch + 1)
             writer.add_scalar(f'Loss/val', val_loss, epoch + 1)
 
-        scheduler.step(val_score)
+        # scheduler.step(val_score)
 
         checkpointer.save_checkpoint(current_metrics = {"val_accuracy" : val_score, "val_loss" : val_loss})
     
@@ -177,18 +189,19 @@ def main(DEF_CFG):
             train_set = M1_SBU_Dataset(train_sets[fold_no], CFG.training.select_frame, mode='train', resize=CFG.model1.resize, fold_no = fold_no+1)
             valid_set = M1_SBU_Dataset(test_sets[fold_no], CFG.training.select_frame, mode='valid', resize=CFG.model1.resize, fold_no = fold_no+1)
         elif CFG.training.model == 'model2':
-            train_set = M2_SBU_Dataset(train_sets[fold_no], CFG.training.select_frame, mode='train', resize=CFG.model1.resize, fold_no = fold_no+1)
-            valid_set = M2_SBU_Dataset(test_sets[fold_no], CFG.training.select_frame, mode='valid', resize=CFG.model1.resize, fold_no = fold_no+1)
+            train_set = M2_SBU_Dataset(CFG.model2.pose_dim, train_sets[fold_no], CFG.training.select_frame, mode='train', resize=CFG.model1.resize, fold_no = fold_no+1)
+            valid_set = M2_SBU_Dataset(CFG.model2.pose_dim, test_sets[fold_no], CFG.training.select_frame, mode='valid', resize=CFG.model1.resize, fold_no = fold_no+1)
 
+        save_model_subdir = get_save_directory(CFG)
 
         if not CFG.training.deterministic:
-            num_runs = 5
+            num_runs = CFG.training.num_runs
             decorator = repeat_k_times(num_runs)
             train = decorator(train)
 
-        result_metrics = train(CFG = CFG, train_set = train_set, valid_set = valid_set, fold_no = fold_no + 1)
+        result_metrics = train(CFG = CFG, train_set = train_set, valid_set = valid_set, save_model_subdir = save_model_subdir, fold_no = fold_no + 1)
         
-        with open(os.path.join(CFG.training.save_model_path, f"fold={fold_no+1}", "best_results.txt"), "w") as f:
+        with open(os.path.join(CFG.training.save_model_path, save_model_subdir, f"fold={fold_no+1}", "best_results.txt"), "w") as f:
             for key,val in result_metrics.items():
                 f.write(f"{key} : {val}\n")
 

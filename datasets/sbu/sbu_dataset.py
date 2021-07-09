@@ -8,47 +8,74 @@ import glob
 import pickle
 
 
+# path to store pickle files containing loaded RGB images and pose values
 folds_cache_path = "/usr/local/data01/rohitram/sbu-snapshots/folds-path"
 if not os.path.exists(folds_cache_path):
     os.makedirs(folds_cache_path)
 
+
 class SBU_Dataset(data.Dataset):
-
-    def __init__(self, set_paths, select_frames, mode, resize = 224, fold_no = None):
+    def __init__(self, set_paths, select_frames, mode, resize=224, fold_no=None, **kwargs):
         """
-        Args
-            set_paths : paths to the participant sets (e.g '../../s0102')
-            select_frames : no. of center frames to use 
-            mode : train/test
-            transform : set of transformations to perform after reading image
+        Dataset class containing utility functions to load individual instances of training data.
+        This class does NOT implement __getitem__. New classes must be written that inherit from
+        this class and implement __getitem__.
+        As the size of SBU Kinect dataset is small, all images and pose values are 
+        read and stored beforeheand to save data loading time. Additionally this loaded data
+        is also written to a pickle file to save on reading time for future training runs.
+        
 
-        As the size of sbu dataset is small, all images are read and stored initially to save data loading time 
+        Parameters
+        ----------
+        set_paths : list
+            paths to the participant sets (e.g '../../s01s02')
+        select_frames : int
+            these number of frames will be selected from the middle of each video
+        mode : string
+            one of "train" or "test"
+        resize: int
+            all frames will be resized to (resize,resize)
+        fold_no: int
+            if using K-fold CV, fold_no is incorporated in name of saved pickle file 
+
         """
 
-        self.folders, self.labels, self.video_len = list(zip(*self.get_video_data(set_paths)))
-        self.select_frames = select_frames   
+        self.folders, self.labels, self.video_len = list(
+            zip(*self.get_video_data(set_paths))
+        )
+        self.select_frames = select_frames
         self.mode = mode
         self.loaded_videos = None
         self.fold_no = fold_no
-        self.transform = transforms.Compose([transforms.Resize([resize, resize]),
-                            transforms.ToTensor(),
-                            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize([resize, resize]),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                ),
+            ]
+        )
 
-        if mode == 'train':
+        if mode == "train":
             if fold_no is None:
-                loaded_dataset_path = os.path.join(folds_cache_path, f'sbu_train.pkl')
+                loaded_dataset_path = os.path.join(folds_cache_path, f"sbu_train.pkl")
             else:
-                loaded_dataset_path = os.path.join(folds_cache_path, f'sbu_train_fold={fold_no}.pkl')
+                loaded_dataset_path = os.path.join(
+                    folds_cache_path, f"sbu_train_fold={fold_no}.pkl"
+                )
             if os.path.exists(loaded_dataset_path):
-                with open(loaded_dataset_path, 'rb') as f:
+                with open(loaded_dataset_path, "rb") as f:
                     self.loaded_videos = pickle.load(f)
-        if mode == 'valid':
+        if mode == "valid":
             if fold_no is None:
-                loaded_dataset_path = os.path.join(folds_cache_path, f'sbu_valid.pkl')
+                loaded_dataset_path = os.path.join(folds_cache_path, f"sbu_valid.pkl")
             else:
-                loaded_dataset_path = os.path.join(folds_cache_path, f'sbu_valid_fold={fold_no}.pkl')
+                loaded_dataset_path = os.path.join(
+                    folds_cache_path, f"sbu_valid_fold={fold_no}.pkl"
+                )
             if os.path.exists(loaded_dataset_path):
-                with open(loaded_dataset_path, 'rb') as f:
+                with open(loaded_dataset_path, "rb") as f:
                     self.loaded_videos = pickle.load(f)
         if self.loaded_videos is None:
             self.loaded_videos = self.load_videos()
@@ -57,85 +84,102 @@ class SBU_Dataset(data.Dataset):
 
     def get_video_data(self, set_paths):
         """
-        Args
-            set_paths : list of paths to participant categories (e.g '../../s01s02') for corresponding set(train/test)
+        Gets meta data from the dataset.
+
+        Parameters
+        ----------
+        set_paths : list
+            paths to the participant sets (e.g '../../s01s02')
 
         Returns
-            all_data : List[ tuple(video_path, label, num_frames) ].
+        -------
+        output : list [(video_path, class label, number of frames in the video)]
+            video_path : e.g '../../s01s02/01/001'
+            class_label : integer from [0,7]
+            number of frames : number of frames in this video
 
-            Each path in 'set_paths' argument is expanded to generate a list of all paths to videos contained
-            in them and the number of frames in each video. Label is category of video (0-7).
+            video_paths are found by walking through set_paths
 
         """
-    
+
         all_data = []
 
-        for part_path in set_paths: 
-            cats = sorted([s.decode("utf-8") for s in os.listdir(part_path)])[1:]      
+        for part_path in set_paths:
+            cats = sorted([s.decode("utf-8") for s in os.listdir(part_path)])[1:]
             for cat in cats:
                 label = int(cat) - 1
-                cat_path = os.path.join(part_path,cat) # path to category(1-8)
-                runs = sorted(os.listdir(cat_path)) 
-                if runs[0] == '.DS_Store':
-                    runs = runs[1::]        
+                cat_path = os.path.join(part_path, cat)  # path to category(1-8)
+                runs = sorted(os.listdir(cat_path))
+                if runs[0] == ".DS_Store":
+                    runs = runs[1::]
                 for run in runs:
                     run_path = os.path.join(cat_path, run)
-                    num_frames = len(glob.glob(f'{run_path}/rgb*'))
-                    all_data.append((run_path,label,num_frames))
+                    num_frames = len(glob.glob(f"{run_path}/rgb*"))
+                    all_data.append((run_path, label, num_frames))
         return all_data
 
     def load_videos(self):
         """
-        Args
-            -
-        
+        Reads RGB images and pose data with the help of meta-data found
+        after function call to get_video_data().
+
+        Parameters
+        ----------
+        None
+
         Returns
-            loaded_videos : a list of 4D tensors (select_frames,#channels,img_height,img_width) obtained by reading 'select_frames' frames 
-            of all videos in self.folders
+        -------
+        output : list [(loaded_frames, video_pose_values)]
+            loaded_frames : 4D Tensor of shape (#frames, #channels, resize, resize)
+            video_pose_values : 2D Tensor of shape (#frames, 90) containing normalized x,y,z pose coordinates for each of 
+            15 keypoints for both participants in each frame. First 45 values correspond to participant 1 and next 45 to 
+            participant 2.
+
         """
 
-        ## load image data
+        # load image data
         loaded_videos = []
-        print(f'Loading {self.mode} Data!')
+        print(f"Loading {self.mode} Data!")
         for index, video_pth in enumerate(tqdm(self.folders)):
             video_len = self.video_len[index]
             start_idx = (video_len - self.select_frames) // 2
             end_idx = start_idx + self.select_frames
 
-            frame_pths = sorted(glob.glob(f'{video_pth}/rgb*'))
-            reqd_frame_pths = frame_pths[start_idx : end_idx]
+            frame_pths = sorted(glob.glob(f"{video_pth}/rgb*"))
+            reqd_frame_pths = frame_pths[start_idx:end_idx]
             loaded_frames = []
             for frame_pth in reqd_frame_pths:
-                frame = Image.open(frame_pth).convert('RGB')
-                frame = self.transform(frame) if self.transform is not None else frame  # impose transformation if exists
+                frame = Image.open(frame_pth).convert("RGB")
+                frame = self.transform(frame) if self.transform is not None else frame # impose transformation if exists
                 loaded_frames.append(frame.squeeze_(0))
             loaded_frames = torch.stack(loaded_frames, dim=0)
 
-
-            ## load pose data
-            with open(os.path.join(video_pth, 'skeleton_pos.txt'), "r") as f:
+            # load pose data
+            with open(os.path.join(video_pth, "skeleton_pos.txt"), "r") as f:
                 pose_data = sorted(f.readlines())
 
             assert len(frame_pths) == len(pose_data), "pose data loaded incorrectly"
 
-            reqd_pose_data = pose_data[start_idx : end_idx]
+            reqd_pose_data = pose_data[start_idx:end_idx]
 
             video_pose_values = []
             for row in reqd_pose_data:
-                posture_data = [x.strip() for x in row.split(',')]
-                frame_pose_values = []
-                for i in range(1, len(posture_data), 3):
-                    frame_pose_values.extend([float(posture_data[i]), float(posture_data[i+1])]) # 60 dim vector of alternating (x.y) values
-                video_pose_values.append(frame_pose_values) # list of 60 dim lists
+                posture_data = [x.strip() for x in row.split(",")]
+                frame_pose_values = [float(x) for x in posture_data[1:]]
+                assert len(frame_pose_values) == 90, "incorrect number of pose values"
+
+                video_pose_values.append(frame_pose_values)  
+
             video_pose_values = torch.tensor(video_pose_values, dtype=torch.float32)
 
-        
+            #loaded_frames : (10,3,224,224), video_pose_values : (10,90)
             loaded_videos.append((loaded_frames, video_pose_values))
 
-        assert len(loaded_videos) == len(self.folders), "error in reading images of videos"
+        assert len(loaded_videos) == len(
+            self.folders
+        ), "error in reading images of videos"
 
         return loaded_videos
-    
 
     def __len__(self):
         return len(self.loaded_videos)
@@ -145,53 +189,94 @@ class SBU_Dataset(data.Dataset):
 
 
 class M1_SBU_Dataset(SBU_Dataset):
+    """
+    dataloader for phase 1 model
+    """
     def __getitem__(self, index):
-        X = self.loaded_videos[index][0]   
-        y = torch.LongTensor([self.labels[index]])            
+        X = self.loaded_videos[index][0]
+        y = torch.LongTensor([self.labels[index]])
         return X, y
 
+
 class M2_SBU_Dataset(SBU_Dataset):
+    """
+    dataloader for phase 2 model
+    """
+    def __init__(self, dim, *args, **kwargs):
+        """
+        Reads RGB images and pose data with the help of meta-data found
+        after function call to get_video_data().
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        output : list [(loaded_frames, video_pose_values)]
+            loaded_frames : 4D Tensor of shape (#frames, #channels, resize, resize)
+            video_pose_values : 2D Tensor of shape (#frames, 90) containing normalized x,y,z pose coordinates for each of 
+            15 keypoints for both participants in each frame. First 45 values correspond to participant 1 and next 45 to 
+            participant 2.
+
+        """
+        super(M2_SBU_Dataset, self).__init__(*args, **kwargs)
+        self.split_size = None
+        self.loaded_poses = None
+
+        if dim==2:
+            idxs = torch.tensor([i for i in range(90) if (i+1)%3!=0])
+            self.loaded_poses = [x[1][:,idxs] for x in self.loaded_videos]
+            self.split_size = 30
+        elif dim==3:
+            self.loaded_poses = [x[1] for x in self.loaded_videos] 
+            self.split_size = 45
+        else:
+            raise Exception("invalid dim in M2_SBU_Dataset! Must be either 2 or 3.")
+
     def __getitem__(self, index):
-        pose_values = self.loaded_videos[index][1]
-        p1, p2 = torch.split(pose_values, [30,30], 1) # split 60 dim pose vector to individual partipants 30 dim pose
-        avg_pose = torch.mean(torch.stack((p1,p2)), 0) # shape = (T,30) 
-        y = torch.LongTensor([self.labels[index]])            
+        pose_values = self.loaded_poses[index]
+        p1, p2 = torch.split(
+            pose_values, [self.split_size, self.split_size], 1
+        )  
+        avg_pose = torch.mean(torch.stack((p1, p2)), 0)  # if dim=2, shape = (T,30) else shape = (T,45)
+        y = torch.LongTensor([self.labels[index]])
+
         return avg_pose, y
-
-
 
 
 if __name__ == "__main__":
 
-    from train_test_split import train_sets, test_sets
+    from .train_test_split import train_sets, test_sets
     import torchvision.transforms as transforms
 
     select_frame = 10
-    res_size = 224
+    resize = 224
 
-    transform = transforms.Compose([transforms.Resize([res_size, res_size]),
-                                    transforms.ToTensor(),
-                                    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+    M1_train_set = M1_SBU_Dataset(
+        train_sets[0], select_frame, mode="train", resize=resize, fold_no=1
+    )
+    M1_valid_set = M1_SBU_Dataset(
+        test_sets[0], select_frame, mode="valid", resize=resize, fold_no=1
+    )
 
-    M1_train_set = M1_SBU_Dataset(train_sets[0], select_frame, mode='train', transform=transform, fold_no = 1)
-    M1_valid_set = M1_SBU_Dataset(test_sets[0], select_frame, mode='valid', transform=transform, fold_no = 1)
-
-    M2_train_set = M2_SBU_Dataset(train_sets[0], select_frame, mode='train', transform=transform, fold_no = 1)
-    M2_valid_set = M2_SBU_Dataset(test_sets[0], select_frame, mode='valid', transform=transform, fold_no = 1)
+    M2_train_set = M2_SBU_Dataset(
+        3, train_sets[0], select_frame, mode="train", resize=resize, fold_no=1
+    )
+    M2_valid_set = M2_SBU_Dataset(
+        3, test_sets[0], select_frame, mode="valid", resize=resize, fold_no=1
+    )
 
     sample_X, sample_y = M1_train_set[4]
-    print(f'M1 : X shape {sample_X.shape}')
-    print(f'M1 : y shape {sample_y}')
+    print(f"M1 : X shape {sample_X.shape}")
+    print(f"M1 : y shape {sample_y}")
 
     print()
     sample_X, sample_y = M2_train_set[4]
-    print(f'M2 : X shape {sample_X.shape}')
-    print(f'M2 : y shape {sample_y}')
+    print(f"M2 : X shape {sample_X.shape}")
+    print(f"M2 : y shape {sample_y}")
 
     # print(f'first 10 train set folders : {train_set.folders[:10]}')
     # print(f'first 10 train set video lengths : {train_set.video_len[:10]}')
     # print(f'first 10 validation set folders : {valid_set.folders[:10]}')
-
-
-
 

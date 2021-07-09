@@ -4,6 +4,25 @@ from .decoder import FrameLSTM, EventLSTM
 
 class Model1(nn.Module):
     def __init__(self, frameLSTM, eventLSTM, CNN_embed_dim, num_classes, **kwargs):
+        """
+        Phase-1 Model
+
+        Parameters
+        ----------
+        frameLSTM: dictionary 
+            dictionary containing parameters of frame-level LSTM. 
+            Must contain 'hidden_size' key representing size of hidden_dim of LSTM. 
+            'winit' and 'forget_gate_bias' keys are optional.
+        eventLSTM: dictionary 
+            dictionary containing parameters of event-level LSTM. 
+            Must contain 'hidden_size' key representing size of hidden_dim of LSTM. 
+            'winit' and 'forget_gate_bias' keys are optional.
+        CNN_embed_dim  : int
+            size of embedding layer in encoder
+        num_classes : int
+            number of output classes of model
+
+        """
         super(Model1, self).__init__()
 
         self.encoder = Encoder(CNN_embed_dim = CNN_embed_dim)
@@ -17,6 +36,11 @@ class Model1(nn.Module):
         # nn.init.xavier_normal_(self.fc.weight)
 
     def forward(self, x):
+        """
+        x : shape (B,T,I)
+        out : shape (B,O)
+
+        """
 
         out = self.encoder(x)
 
@@ -31,7 +55,23 @@ class Model1(nn.Module):
         return out[:,-1,:] # return last time step for now
 
 class Model2(nn.Module):
-    def __init__(self, eventLSTM, input_size, num_classes = 8):
+    def __init__(self, eventLSTM, input_size, num_classes, **kwargs):
+        """
+        Phase-2 Model
+
+        Parameters
+        ----------
+        eventLSTM: dictionary 
+            dictionary containing parameters of event-level LSTM. 
+            Must contain 'hidden_size' key representing size of hidden_dim of LSTM. 
+            'winit' and 'forget_gate_bias' keys are optional.
+        input_size  : int
+            size of input to eventLSTM
+        num_classes : int
+            number of output classes of model
+        
+        """
+
         super(Model2, self).__init__()
 
         self.eventLSTM = EventLSTM(input_size = input_size, **eventLSTM)
@@ -40,7 +80,9 @@ class Model2(nn.Module):
 
     def forward(self, x):
         """
-        x.shape : (B,T,30) 
+        x : shape (B,T,I)
+        out : shape (B,O)
+        
         """
 
         e_out, (e_h_n, e_h_c) = self.eventLSTM(x)
@@ -53,18 +95,17 @@ class Model2(nn.Module):
 
 if __name__ == "__main__":
     import torch
-    inp = torch.randn((2,5,3,224,224)) # (batch, time_step, channels, img_h, img_w)
 
     print(f'Model 1 Test')
-    inp = torch.randn((2,5,3,224,224))
-    m1 = Model1(CNN_embed_dim = 10, h_frameLSTM = 4, h_eventLSTM = 6, num_classes = 8)
+    inp = torch.randn((2,5,3,224,224)) #(batch, time_step, channels, img_h, img_w)
+    m1 = Model1(frameLSTM={"hidden_size":128}, eventLSTM={"hidden_size":128}, CNN_embed_dim=32, num_classes=8)
     out = m1(inp)
     print(out.shape)
 
     print()
     print(f'Model 2 Test')
-    inp = torch.randn((2,10,30))
-    m2 = Model2(input_size=30, h_eventLSTM=256, num_classes=8)
+    inp = torch.randn((2,10,30)) #(B,T,I)
+    m2 = Model2(eventLSTM={"hidden_size":128}, input_size=30, num_classes=8)
     out = m2(inp)
     print(out.shape)
 

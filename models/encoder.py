@@ -7,7 +7,7 @@ import torchvision.models as models
 class Encoder(nn.Module):
     def __init__(self, CNN_embed_dim = 256):
         """
-            Load the pretrained ResNet-152 and replace last fc layer with embedding layer.
+            Load pretrained ResNet-152 and replace last fc layer with embedding layer.
             Only embedding layer is trainable.
 
         """
@@ -25,22 +25,6 @@ class Encoder(nn.Module):
         # nn.init.xavier_normal_(self.embedding_layer.weight)
         
     def forward(self, x):
-        # cnn_embed_seq = []
-        # for t in range(x.size(1)):        
-        #     with torch.no_grad():
-        #         out = self.resnet(x[:, t, :, :, :])     # ResNet
-        #         out = out.view(out.size(0), -1)         # flatten output of conv
-
-        #     out = self.embedding_layer(out)                
-        #     out= F.relu(out)
-
-        #     cnn_embed_seq.append(out)
-
-        # # swap time and batch dimensions. Resulting shape is (batch,frames,embed_dim)
-        # cnn_embed_seq = torch.stack(cnn_embed_seq, dim=0).transpose_(0, 1) 
-
-        # return cnn_embed_seq
-
         B,T,C,H,W = x.size()
         x = x.view(-1,C,H,W)      
         with torch.no_grad():  
