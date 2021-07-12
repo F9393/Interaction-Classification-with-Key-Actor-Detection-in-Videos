@@ -19,8 +19,8 @@ class Attention(nn.Module):
         
     def forward(self, query, keys, mask = None):
         """
-        query : (B,1,Q)
-        keys : (B,P,K) #(batch_size, #players, #key_size)
+        query : (B,1,Q) (prev LSTM hidden state)
+        keys : (B,P,K) (batch_size, #players, #key_size) (key_size = number of keypoints)
         mask : (B,P)
         
         """

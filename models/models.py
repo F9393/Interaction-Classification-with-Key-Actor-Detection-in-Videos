@@ -1,6 +1,8 @@
+import torch
 import torch.nn as nn
 from .encoder import Encoder
 from .decoder import FrameLSTM, EventLSTM
+from .attention import Attention
 
 class Model1(nn.Module):
     def __init__(self, frameLSTM, eventLSTM, CNN_embed_dim, num_classes, **kwargs):
@@ -93,6 +95,54 @@ class Model2(nn.Module):
 
         return out[:,-1,:] # return last time step for now
 
+class Model3(nn.Module):
+    def __init__(self, eventLSTM, input_size, num_classes, **kwargs):
+        """
+        Phase-2 Model
+
+        Parameters
+        ----------
+        eventLSTM: dictionary 
+            dictionary containing parameters of event-level LSTM. 
+            Must contain 'hidden_size' key representing size of hidden_dim of LSTM. 
+            'winit' and 'forget_gate_bias' keys are optional.
+        input_size  : int
+            size of input to eventLSTM
+        num_classes : int
+            number of output classes of model
+        
+        """
+
+        super(Model3, self).__init__()
+
+        self.hidden_size = eventLSTM['hidden_size']
+        self.eventLSTM = EventLSTM(input_size = self.hidden_size + input_size, **eventLSTM)
+        self.attention = Attention(self.hidden_size, input_size, self.hidden_size)
+        self.fc = nn.Linear(in_features = eventLSTM['hidden_size'], out_features = num_classes)
+
+    def forward(self, x):
+        """
+        x : shape (B,T,P,I) (batch_size, #frames, #person, person feature size)
+        out : shape (B,O)
+        
+        """
+        out = torch.zeros(x.size(0), 1, self.hidden_size, device=torch.device("cuda"))
+        hidden = torch.zeros(1, x.size(0), self.hidden_size, device=torch.device("cuda"))
+        cell = torch.zeros(1, x.size(0), self.hidden_size, device=torch.device("cuda"))
+
+        for t in range(x.size(1)):
+            context = self.attention(out, x[:,t,:,:]).unsqueeze(1)
+            # print(f'hidden {hidden.shape}')
+            # print(f'context {context.shape}')
+
+            emb = torch.cat([out,context], 2)
+            out, (hidden,cell) = self.eventLSTM(emb, (hidden,cell))
+        
+        # [B,1,H] -> [B,1,O]
+        out = self.fc(out) 
+
+        return out[:,-1,:] 
+
 if __name__ == "__main__":
     import torch
 
@@ -109,4 +159,9 @@ if __name__ == "__main__":
     out = m2(inp)
     print(out.shape)
 
-    
+    print()
+    print(f'Model 3 Test')
+    inp = torch.randn((2,10,5,30)) #(B,T,P,I)
+    m3 = Model3(eventLSTM={"hidden_size":128}, input_size=30, num_classes=8)
+    out = m3(inp)
+    print(out.shape)
