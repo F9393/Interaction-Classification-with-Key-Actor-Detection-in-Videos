@@ -1,0 +1,45 @@
+---
+  training:    
+    dataloader:
+      batch_size: 16
+      num_workers: 4
+      shuffle: true
+      pin_memory: true
+    select_frame: 10   
+    num_epochs: 200  
+    learning_rate: 1e-4
+    lr_patience: 10
+    log_interval: 10
+    save_checkpoint: true
+    save_tensorboard: true
+    deterministic: false
+    save_model_path: "/usr/local/data01/rohitram/sbu-snapshots/"
+    save_tensorboard_dir: "/usr/local/data01/rohitram/sbu-snapshots/"
+    pytorch_seed: 0
+    folds: [0,1,2,3,4]
+    num_runs: 5
+    model: "model1"
+
+  model1: 
+    resize: 224       
+    CNN_embed_dim: 256
+    num_classes: 8 
+    frameLSTM:
+      hidden_size: 256
+      winit: "xavier_normal"
+      forget_gate_bias: 2
+    eventLSTM:  
+      hidden_size: 256 
+      winit: "xavier_normal"
+      forget_gate_bias: 2
+    
+  model2:
+    input_size: 30
+    pose_dim: 2 # 2=>(x,y), 3=>(x,y,z)
+    num_classes: 8 
+    eventLSTM:  
+      hidden_size: 256 
+      winit: "default"
+      forget_gate_bias: "default"
+
+  

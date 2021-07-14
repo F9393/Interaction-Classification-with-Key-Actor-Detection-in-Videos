@@ -1,58 +1,120 @@
 import torch.nn as nn
 
-class Decoder(nn.Module):
-    def __init__(self, CNN_embed_dim = 256, h_frameLSTM = 256, h_eventLSTM = 256, num_classes = 8):
-        super(Decoder, self).__init__()
+class FrameLSTM(nn.Module):
+    """
+        Frame-Level LSTM
 
-        self.CNN_embed_dim = CNN_embed_dim
-        self.h_frameLSTM = h_frameLSTM                 # RNN hidden nodes
-        self.h_eventLSTM = h_eventLSTM
-        self.num_classes = num_classes
+        Parameters
+        ----------
+        module_input: tensor
+            shape : (B,T,I) #(batch,time_step,input_dim)
+
+        Returns
+        -------
+        module_output : tuple 
+            f_out, (f_h_n. f_h_c)
+
+            f_out : shape (batch, time_step, 2 * hidden_size)
+            f_h_n : shape (2 * n_layers, batch, hidden_size)
+            f_h_c : shape (2 * n_layers, batch, hidden_size) 
+
+    """
+    def __init__(self, input_size, hidden_size, winit = None, forget_gate_bias = None, **kwargs):
+        super(FrameLSTM, self).__init__()
+
+        self.input_size = input_size
+        self.hidden_size = hidden_size                
 
         self.frameLSTM = nn.LSTM(
-            input_size = self.CNN_embed_dim,
-            hidden_size = self.h_frameLSTM,        
+            input_size = self.input_size,
+            hidden_size = self.hidden_size,        
             num_layers = 1,       
-            batch_first = True,       # input & output has batch size as 1st dimension. i.e. (batch, time_step, input_size)
+            batch_first = True,     
             bidirectional = True
         )
 
-        self.eventLSTM = nn.LSTM(
-            input_size = 2 * self.h_frameLSTM, # since input is from bidirectional LSTM
-            hidden_size = self.h_eventLSTM,        
-            num_layers = 1,       
-            batch_first = True,       # input & output has batch size as 1st dimension. i.e. (batch, time_step, input_size)
-            bidirectional = False
-        )
-
-        self.fc = nn.Linear(self.h_eventLSTM, self.num_classes)
+        for layer in self.frameLSTM._all_weights:
+            for name in layer: 
+                if 'weight' in name:
+                    weight = getattr(self.frameLSTM, name)
+                    if winit=="xavier_normal":
+                        nn.init.xavier_normal_(weight.data)
+                elif 'bias' in name:
+                    bias = getattr(self.frameLSTM, name)
+                    n = bias.size(0)
+                    start, end = n//4, n//2
+                    if forget_gate_bias is not None and forget_gate_bias != 'default':
+                        bias.data[start:end].fill_(forget_gate_bias*1.0/2)
+                            
 
     def forward(self, x):
         """ 
             f_out : shape (batch, time_step, 2 * hidden_size)
             f_h_n : shape (2 * n_layers, batch, hidden_size)
             f_h_c : shape (2 * n_layers, batch, hidden_size) 
-            
-            e_out : shape (batch, time_step, hidden_size)
-            e_h_n : shape (n_layers, batch, hidden_size)
-            e_h_c : shape (n_layers, batch, hidden_size) 
         """
 
         self.frameLSTM.flatten_parameters()
         f_out, (f_h_n, f_h_c) = self.frameLSTM(x, None)  
 
+        return f_out, (f_h_n, f_h_c)
+
+
+class EventLSTM(nn.Module):
+    """
+        Event-Level LSTM
+
+        Parameters
+        ----------
+        module_input: tensor
+            shape : (B,T,I) #(batch,time_step,input_dim)
+
+        Returns
+        -------
+        module_output : tuple 
+            e_out, (e_h_n. e_h_c)
+
+            e_out : shape (batch, time_step, hidden_size)
+            e_h_n : shape (n_layers, batch, hidden_size)
+            e_h_c : shape (n_layers, batch, hidden_size) 
+
+    """
+    def __init__(self, input_size, hidden_size, winit = None, forget_gate_bias = None, **kwargs):
+        super(EventLSTM, self).__init__()
+
+        self.input_size = input_size         
+        self.hidden_size = hidden_size       
+
+        self.eventLSTM = nn.LSTM(
+            input_size = self.input_size, 
+            hidden_size = self.hidden_size,        
+            num_layers = 1,       
+            batch_first = True,     
+            bidirectional = False
+        )
+
+        for layer in self.eventLSTM._all_weights:
+            for name in layer: 
+                if 'weight' in name:
+                    weight = getattr(self.eventLSTM, name)
+                    if winit=="xavier_normal":
+                        nn.init.xavier_normal_(weight.data)
+                elif 'bias' in name:
+                    bias = getattr(self.eventLSTM, name)
+                    n = bias.size(0)
+                    start, end = n//4, n//2
+                    if forget_gate_bias is not None and forget_gate_bias != 'default':
+                        bias.data[start:end].fill_(forget_gate_bias*1.0/2)
+                            
+
+    def forward(self, x):
+        """ 
+            e_out : shape (batch, time_step, hidden_size)
+            e_h_n : shape (n_layers, batch, hidden_size)
+            e_h_c : shape (n_layers, batch, hidden_size) 
+        """
+
         self.eventLSTM.flatten_parameters()
-        e_out, (e_h_n, e_h_c) = self.eventLSTM(f_out, None)
+        e_out, (e_h_n, e_h_c) = self.eventLSTM(x, None)
 
-        B,T,H = e_out.shape # batch,time_step,hidden_size
-        
-        out = self.fc(e_out.reshape(-1,H)).view(B,T,-1) # pass output hidden states of all time steps to the same FC layer (will be needed for hinge loss)
-
-        return out[:,-1,:] # return last time step for now
-
-if __name__ == "__main__":
-    import torch
-    inp = torch.randn((9,5,10)) # (batch,time_step,cnn_embedding_dim)
-    dec = Decoder(CNN_embed_dim = 10, h_frameLSTM = 4, h_eventLSTM = 6)
-    out = dec(inp)
-    print(out.shape)
+        return e_out, (e_h_n, e_h_c)
