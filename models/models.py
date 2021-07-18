@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from .encoder import Encoder
 from .decoder import FrameLSTM, EventLSTM
-from .attention import Attention
+from .attention import Attention1, Attention2
 
 class Model1(nn.Module):
     def __init__(self, frameLSTM, eventLSTM, CNN_embed_dim, num_classes, **kwargs):
@@ -96,9 +96,9 @@ class Model2(nn.Module):
         return out[:,-1,:] # return last time step for now
 
 class Model3(nn.Module):
-    def __init__(self, eventLSTM, input_size, num_classes, **kwargs):
+    def __init__(self, eventLSTM, input_size, num_classes, attention_type, **kwargs):
         """
-        Phase-2 Model
+        Phase-3 Model
 
         Parameters
         ----------
@@ -110,14 +110,23 @@ class Model3(nn.Module):
             size of input to eventLSTM
         num_classes : int
             number of output classes of model
+        attention_type: 1 or 2
         
         """
 
         super(Model3, self).__init__()
 
         self.hidden_size = eventLSTM['hidden_size']
-        self.eventLSTM = EventLSTM(input_size = self.hidden_size + input_size, **eventLSTM)
-        self.attention = Attention(self.hidden_size, input_size, self.hidden_size)
+
+        if attention_type == 1 :
+            self.attention = Attention1(self.hidden_size, input_size)
+            self.eventLSTM = EventLSTM(input_size = self.hidden_size + input_size, **eventLSTM)
+        elif attention_type == 2:
+            self.attention = Attention2(self.hidden_size, input_size)
+            self.eventLSTM = EventLSTM(input_size = input_size, **eventLSTM)
+        else:
+            raise Exception("invalid attention type! Must be either 1 or 2.")
+            
         self.fc = nn.Linear(in_features = eventLSTM['hidden_size'], out_features = num_classes)
 
     def forward(self, x):
@@ -131,12 +140,9 @@ class Model3(nn.Module):
         cell = torch.zeros(1, x.size(0), self.hidden_size, device=torch.device("cuda"))
 
         for t in range(x.size(1)):
-            context = self.attention(out, x[:,t,:,:]).unsqueeze(1)
-            # print(f'hidden {hidden.shape}')
-            # print(f'context {context.shape}')
-
-            emb = torch.cat([out,context], 2)
-            out, (hidden,cell) = self.eventLSTM(emb, (hidden,cell))
+            embeddings,_ = self.attention(out, x[:,t,:,:])
+            
+            out, (hidden,cell) = self.eventLSTM(embeddings, (hidden,cell))
         
         # [B,1,H] -> [B,1,O]
         out = self.fc(out) 
@@ -161,7 +167,7 @@ if __name__ == "__main__":
 
     print()
     print(f'Model 3 Test')
-    inp = torch.randn((2,10,5,30)) #(B,T,P,I)
-    m3 = Model3(eventLSTM={"hidden_size":128}, input_size=30, num_classes=8)
+    inp = torch.randn((2,10,5,30),device='cuda') #(B,T,P,I)
+    m3 = Model3(eventLSTM={"hidden_size":128}, input_size=30, num_classes=8, attention_type=2).cuda()
     out = m3(inp)
     print(out.shape)

@@ -6,10 +6,10 @@
       shuffle: true
       pin_memory: true
     select_frame: 10   
-    num_epochs: 200  
+    num_epochs: 500  
     learning_rate: 1e-4
     lr_patience: 10
-    log_interval: 10
+    log_interval: 100
     save_checkpoint: true
     save_tensorboard: true
     deterministic: false
@@ -18,7 +18,7 @@
     pytorch_seed: 0
     folds: [0,1,2,3,4]
     num_runs: 5
-    model: "model1"
+    model: "model3"
 
   model1: 
     resize: 224       
@@ -26,12 +26,12 @@
     num_classes: 8 
     frameLSTM:
       hidden_size: 256
-      winit: "xavier_normal"
-      forget_gate_bias: 2
+      winit: "default"
+      forget_gate_bias: "default"
     eventLSTM:  
       hidden_size: 256 
-      winit: "xavier_normal"
-      forget_gate_bias: 2
+      winit: "default"
+      forget_gate_bias: "default"
     
   model2:
     input_size: 30
@@ -42,4 +42,13 @@
       winit: "default"
       forget_gate_bias: "default"
 
+  model3:
+    input_size: 30
+    pose_dim: 2 # 2=>(x,y), 3=>(x,y,z)
+    num_classes: 8 
+    eventLSTM:  
+      hidden_size: 256 
+      winit: "default"
+      forget_gate_bias: "default"
+    attention_type: 2
   

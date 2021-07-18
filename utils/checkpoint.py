@@ -114,8 +114,6 @@ class CheckPointer:
             print("Loading scheduler from {}".format(load_file))
             self.scheduler.load_state_dict(checkpoint.pop("scheduler"))
 
-        return checkpoint
-
     def has_checkpoint(self, checkpoint_type):
         if checkpoint_type == "last":
             files = sorted(
@@ -190,13 +188,17 @@ def get_save_directory(CFG):
         else:
             event_forget_bias = model.eventLSTM.forget_gate_bias
     lr = CFG.training.learning_rate
+    eps  = CFG.training.num_epochs
     
 
     save_model_subdir = CFG.training.model
     save_model_subdir = os.path.join(
         save_model_subdir,
-        f"d={d},seed={sd},framew={framew},framefb={frame_forget_bias},eventw={eventw},eventfb={event_forget_bias}",
+        f"d={d},seed={sd},framew={framew},framefb={frame_forget_bias},eventw={eventw},eventfb={event_forget_bias},ep={eps}",
     )
+
+    if CFG.training.model =='model3':
+        save_model_subdir += f',attn={CFG.model3.attention_type}'
 
     return save_model_subdir
 
