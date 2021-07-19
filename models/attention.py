@@ -5,7 +5,7 @@ import torch.nn.functional as F
 class Attention1(nn.Module):    
     def __init__(self, hidden_size, key_size):
         """
-        query-size = size of hidden_dim of eventLSTM
+        hidden-size = size of hidden_dim of eventLSTM
         key_size = size of feature representation of player
 
         """
@@ -23,7 +23,7 @@ class Attention1(nn.Module):
         
         """
 
-        # [B,1,Q] -> [B,1,H]
+        # [B,1,H] -> [B,1,H]
         proj_query = self.query_layer(query)
 
         # [B,P,K] -> [B,P,H]
@@ -49,12 +49,8 @@ class Attention1(nn.Module):
         # [B,1,P] * [B,P,K] -> [B,1,K]
         context = torch.bmm(alphas.unsqueeze(1), keys)
 
-        # input to current time step of LSTM
-        # cat([B,1,H],[B,1,K]) -> [B,1,K+H] 
-        embeddings = torch.cat([query,context], 2)
-
-        # context shape: [B,1,K], alphas shape: [B,P], embeddings_shape: [B,1,K+H]
-        return embeddings, alphas
+        # embeddings_shape: [B,1,K], alphas shape: [B,P]
+        return context, alphas
 
 class Attention2(nn.Module):    
     def __init__(self, hidden_size, key_size):

@@ -120,13 +120,12 @@ class Model3(nn.Module):
 
         if attention_type == 1 :
             self.attention = Attention1(self.hidden_size, input_size)
-            self.eventLSTM = EventLSTM(input_size = self.hidden_size + input_size, **eventLSTM)
         elif attention_type == 2:
             self.attention = Attention2(self.hidden_size, input_size)
-            self.eventLSTM = EventLSTM(input_size = input_size, **eventLSTM)
         else:
             raise Exception("invalid attention type! Must be either 1 or 2.")
             
+        self.eventLSTM = EventLSTM(input_size = input_size, **eventLSTM)
         self.fc = nn.Linear(in_features = eventLSTM['hidden_size'], out_features = num_classes)
 
     def forward(self, x):
