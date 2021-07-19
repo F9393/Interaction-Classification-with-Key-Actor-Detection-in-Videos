@@ -156,7 +156,7 @@ class SBU_Dataset(data.Dataset):
 
             # load pose data
             with open(os.path.join(video_pth, "skeleton_pos.txt"), "r") as f:
-                pose_data = sorted(f.readlines())
+                pose_data = f.readlines()
 
             assert len(frame_pths) == len(pose_data), "pose data loaded incorrectly"
 
