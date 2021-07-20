@@ -17,9 +17,9 @@ import hydra
 from utils.checkpoint import CheckPointer, get_save_directory
 from utils.display import display_sample_images, display_model_graph
 from utils.training_utils import repeat_k_times
-from models.models import Model1, Model2
+from models.models import Model1, Model2, Model3
 from datasets.sbu.train_test_split import train_sets, test_sets # generates K-fold train and test sets
-from datasets.sbu.sbu_dataset import  M1_SBU_Dataset, M2_SBU_Dataset
+from datasets.sbu.sbu_dataset import  M1_SBU_Dataset, M2_SBU_Dataset, M3_SBU_Dataset
 
 def evaluate(model, device, loader):
     model.eval()
@@ -79,6 +79,8 @@ def train(CFG, train_set, valid_set, save_model_subdir, fold_no = None, run_no =
         model = Model1(**CFG.model1).to(device)
     elif CFG.training.model == 'model2':
         model = Model2(**CFG.model2).to(device)
+    elif CFG.training.model == 'model3':
+        model = Model3(**CFG.model3).to(device)
     else:
         raise NotImplementedError("invalid model")
 
@@ -93,6 +95,8 @@ def train(CFG, train_set, valid_set, save_model_subdir, fold_no = None, run_no =
                         + list(model.module.eventLSTM.parameters()) + list(model.module.fc.parameters())
         elif CFG.training.model == 'model2':
             crnn_params = model.module.parameters()
+        elif CFG.training.model == 'model3':
+            crnn_params = model.module.parameters()
 
     elif torch.cuda.device_count() == 1:
         print("Using", torch.cuda.device_count(), "GPU!")
@@ -101,6 +105,8 @@ def train(CFG, train_set, valid_set, save_model_subdir, fold_no = None, run_no =
             crnn_params = list(model.encoder.embedding_layer.parameters()) + list(model.frameLSTM.parameters()) \
                         + list(model.eventLSTM.parameters()) + list(model.fc.parameters())
         elif CFG.training.model == 'model2':
+            crnn_params = model.parameters()
+        elif CFG.training.model == 'model3':
             crnn_params = model.parameters()
 
     if CFG.training.save_tensorboard:
@@ -180,9 +186,13 @@ def train(CFG, train_set, valid_set, save_model_subdir, fold_no = None, run_no =
 
 @hydra.main(config_path="configs", config_name="config")
 def main(DEF_CFG):
-    global train
-    
     CFG = DEF_CFG.dataset
+
+    global train
+    if not CFG.training.deterministic:
+        num_runs = CFG.training.num_runs
+        decorator = repeat_k_times(num_runs)
+        train = decorator(train)
 
     for fold_no in CFG.training.folds:
         if CFG.training.model == 'model1':
@@ -191,13 +201,15 @@ def main(DEF_CFG):
         elif CFG.training.model == 'model2':
             train_set = M2_SBU_Dataset(CFG.model2.pose_dim, train_sets[fold_no], CFG.training.select_frame, mode='train', resize=CFG.model1.resize, fold_no = fold_no+1)
             valid_set = M2_SBU_Dataset(CFG.model2.pose_dim, test_sets[fold_no], CFG.training.select_frame, mode='valid', resize=CFG.model1.resize, fold_no = fold_no+1)
+        elif CFG.training.model == 'model3':
+            train_set = M3_SBU_Dataset(CFG.model3.pose_dim, train_sets[fold_no], CFG.training.select_frame, mode='train', resize=CFG.model1.resize, fold_no = fold_no+1)
+            valid_set = M3_SBU_Dataset(CFG.model3.pose_dim, test_sets[fold_no], CFG.training.select_frame, mode='valid', resize=CFG.model1.resize, fold_no = fold_no+1)
 
         save_model_subdir = get_save_directory(CFG)
 
-        if not CFG.training.deterministic:
-            num_runs = CFG.training.num_runs
-            decorator = repeat_k_times(num_runs)
-            train = decorator(train)
+        save_model_subdir = os.path.join(save_model_subdir,'no_scheduler')
+        if not os.path.exists(save_model_subdir):
+            os.makedirs(save_model_subdir)
 
         result_metrics = train(CFG = CFG, train_set = train_set, valid_set = valid_set, save_model_subdir = save_model_subdir, fold_no = fold_no + 1)
         

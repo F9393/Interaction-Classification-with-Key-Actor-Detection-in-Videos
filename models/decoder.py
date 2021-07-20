@@ -47,7 +47,7 @@ class FrameLSTM(nn.Module):
                         bias.data[start:end].fill_(forget_gate_bias*1.0/2)
                             
 
-    def forward(self, x):
+    def forward(self, x, init_hidden = None):
         """ 
             f_out : shape (batch, time_step, 2 * hidden_size)
             f_h_n : shape (2 * n_layers, batch, hidden_size)
@@ -55,7 +55,7 @@ class FrameLSTM(nn.Module):
         """
 
         self.frameLSTM.flatten_parameters()
-        f_out, (f_h_n, f_h_c) = self.frameLSTM(x, None)  
+        f_out, (f_h_n, f_h_c) = self.frameLSTM(x, init_hidden)  
 
         return f_out, (f_h_n, f_h_c)
 
@@ -107,7 +107,7 @@ class EventLSTM(nn.Module):
                         bias.data[start:end].fill_(forget_gate_bias*1.0/2)
                             
 
-    def forward(self, x):
+    def forward(self, x, init_hidden = None):
         """ 
             e_out : shape (batch, time_step, hidden_size)
             e_h_n : shape (n_layers, batch, hidden_size)
@@ -115,6 +115,6 @@ class EventLSTM(nn.Module):
         """
 
         self.eventLSTM.flatten_parameters()
-        e_out, (e_h_n, e_h_c) = self.eventLSTM(x, None)
+        e_out, (e_h_n, e_h_c) = self.eventLSTM(x, init_hidden)
 
         return e_out, (e_h_n, e_h_c)
