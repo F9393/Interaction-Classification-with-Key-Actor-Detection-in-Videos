@@ -17,29 +17,30 @@ import hydra
 from utils.checkpoint import CheckPointer, get_save_directory
 from utils.display import display_sample_images, display_model_graph
 from utils.training_utils import repeat_k_times
-from models.models import Model1, Model2, Model3
+from models.models import Model1, Model2, Model3, Model4
 from datasets.sbu.train_test_split import train_sets, test_sets # generates K-fold train and test sets
-from datasets.sbu.sbu_dataset import  M1_SBU_Dataset, M2_SBU_Dataset, M3_SBU_Dataset
+from datasets.sbu.sbu_dataset import  M1_SBU_Dataset, M2_SBU_Dataset, M3_SBU_Dataset, M4_SBU_Dataset
 
 def evaluate(model, device, loader):
     model.eval()
     val_loss = 0
     right, total = 0,0
     with torch.no_grad():
-        for X, y in loader:
-            X, y = X.to(device), y.to(device).view(-1, )
+        for *inps, y in loader:
+            for i in range(len(inps)):
+                inps[i] = inps[i].to(device)
+            y = y.to(device).view(-1, )
 
-            output = model(X)
+            output = model(*inps)
 
             loss = F.cross_entropy(output, y, reduction='sum')
             val_loss += loss.item()                 
             y_pred = torch.argmax(output, axis=1)  
 
             right += torch.sum(y_pred == y)
-            total += y_pred.shape[0]
 
     val_loss /= len(loader.dataset)
-    val_score = right * 1.0 / total
+    val_score = right * 1.0 / len(loader.dataset)
 
     return val_score, val_loss
 
@@ -81,8 +82,8 @@ def train(CFG, train_set, valid_set, save_model_subdir, fold_no = None, run_no =
         model = Model2(**CFG.model2).to(device)
     elif CFG.training.model == 'model3':
         model = Model3(**CFG.model3).to(device)
-    else:
-        raise NotImplementedError("invalid model")
+    elif CFG.training.model == 'model4':
+        model = Model4(**CFG.model4).to(device)
 
     # Parallelize model to multiple GPUs
     if torch.cuda.device_count() > 1:
@@ -97,6 +98,10 @@ def train(CFG, train_set, valid_set, save_model_subdir, fold_no = None, run_no =
             crnn_params = model.module.parameters()
         elif CFG.training.model == 'model3':
             crnn_params = model.module.parameters()
+        elif CFG.training.model == 'model4':
+            crnn_params = list(model.module.encoder.embedding_layer.parameters()) + list(model.module.frameLSTM.parameters()) \
+                        + list(model.module.eventLSTM.parameters()) + list(model.module.attention.parameters()) \
+                        + list(model.module.fc.parameters())
 
     elif torch.cuda.device_count() == 1:
         print("Using", torch.cuda.device_count(), "GPU!")
@@ -108,6 +113,10 @@ def train(CFG, train_set, valid_set, save_model_subdir, fold_no = None, run_no =
             crnn_params = model.parameters()
         elif CFG.training.model == 'model3':
             crnn_params = model.parameters()
+        elif CFG.training.model == 'model4':
+            crnn_params = list(model.encoder.embedding_layer.parameters()) + list(model.frameLSTM.parameters()) \
+                        + list(model.eventLSTM.parameters()) + list(model.attention.parameters()) \
+                        + list(model.fc.parameters())
 
     if CFG.training.save_tensorboard:
         writer = SummaryWriter(log_dir = save_tensorboard_dir)
@@ -133,17 +142,18 @@ def train(CFG, train_set, valid_set, save_model_subdir, fold_no = None, run_no =
         model.train()
         N_count = 0   
         epoch_start_time = timeit.default_timer()
-
-        for batch_idx, (X, y) in enumerate(train_loader):
+        
+        for batch_idx, (*inps,y) in enumerate(train_loader):
             batch_start_time = timeit.default_timer()
-       
-            X, y = X.to(device), y.to(device).view(-1, )
 
-            N_count += X.size(0)
+            for i in range(len(inps)):
+                inps[i] = inps[i].to(device)
+            y = y.to(device).view(-1, )
 
+            N_count += inps[0].size(0)
             optimizer.zero_grad()
-            output = model(X)  
 
+            output = model(*inps)  
             loss = F.cross_entropy(output, y)
 
             loss.backward()
@@ -158,26 +168,19 @@ def train(CFG, train_set, valid_set, save_model_subdir, fold_no = None, run_no =
 
             if (batch_idx + 1) % CFG.training.log_interval == 0:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tTime:{:.3f}'.format(
-                    epoch + 1, N_count, len(train_loader.dataset), 100. * (batch_idx + 1) / len(train_loader), loss.item(), batch_end_time - batch_start_time))     
-
+                    epoch + 1, N_count, len(train_loader.dataset), 100. * (batch_idx + 1) / len(train_loader), loss.item(), batch_end_time - batch_start_time))      
         
         train_score, train_loss = evaluate(model, device, train_loader)
         val_score, val_loss = evaluate(model, device, valid_loader)
-
         print('\nTrain set : Average loss: {:.4f}, Accuracy: {:.6f}'.format(train_loss, train_score))
         print('Val set : Average loss: {:.4f}, Accuracy: {:.6f}\n'.format(val_loss, val_score))
-
         if CFG.training.save_tensorboard:
             writer.add_scalar(f'Accuracy/train', train_score, epoch + 1)
             writer.add_scalar(f'Accuracy/val', val_score, epoch + 1)
             writer.add_scalar(f'Loss/val', val_loss, epoch + 1)
-
         # scheduler.step(val_score)
-
         checkpointer.save_checkpoint(current_metrics = {"val_accuracy" : val_score, "val_loss" : val_loss})
-    
         epoch_end_time = timeit.default_timer()  
-
         print(f'Epoch run time : {epoch_end_time-epoch_start_time:.3f}\n')
 
     print(f'best metrics {checkpointer.best_metrics}')
@@ -199,17 +202,18 @@ def main(DEF_CFG):
             train_set = M1_SBU_Dataset(train_sets[fold_no], CFG.training.select_frame, mode='train', resize=CFG.model1.resize, fold_no = fold_no+1)
             valid_set = M1_SBU_Dataset(test_sets[fold_no], CFG.training.select_frame, mode='valid', resize=CFG.model1.resize, fold_no = fold_no+1)
         elif CFG.training.model == 'model2':
-            train_set = M2_SBU_Dataset(CFG.model2.pose_dim, train_sets[fold_no], CFG.training.select_frame, mode='train', resize=CFG.model1.resize, fold_no = fold_no+1)
-            valid_set = M2_SBU_Dataset(CFG.model2.pose_dim, test_sets[fold_no], CFG.training.select_frame, mode='valid', resize=CFG.model1.resize, fold_no = fold_no+1)
+            train_set = M2_SBU_Dataset(CFG.model2.pose_coord, train_sets[fold_no], CFG.training.select_frame, mode='train', resize=CFG.model1.resize, fold_no = fold_no+1)
+            valid_set = M2_SBU_Dataset(CFG.model2.pose_coord, test_sets[fold_no], CFG.training.select_frame, mode='valid', resize=CFG.model1.resize, fold_no = fold_no+1)
         elif CFG.training.model == 'model3':
-            train_set = M3_SBU_Dataset(CFG.model3.pose_dim, train_sets[fold_no], CFG.training.select_frame, mode='train', resize=CFG.model1.resize, fold_no = fold_no+1)
-            valid_set = M3_SBU_Dataset(CFG.model3.pose_dim, test_sets[fold_no], CFG.training.select_frame, mode='valid', resize=CFG.model1.resize, fold_no = fold_no+1)
+            train_set = M3_SBU_Dataset(CFG.model3.pose_coord, train_sets[fold_no], CFG.training.select_frame, mode='train', resize=CFG.model1.resize, fold_no = fold_no+1)
+            valid_set = M3_SBU_Dataset(CFG.model3.pose_coord, test_sets[fold_no], CFG.training.select_frame, mode='valid', resize=CFG.model1.resize, fold_no = fold_no+1)
+        elif CFG.training.model == 'model4':
+            train_set = M4_SBU_Dataset(CFG.model3.pose_coord, train_sets[fold_no], CFG.training.select_frame, mode='train', resize=CFG.model1.resize, fold_no = fold_no+1)
+            valid_set = M4_SBU_Dataset(CFG.model3.pose_coord, test_sets[fold_no], CFG.training.select_frame, mode='valid', resize=CFG.model1.resize, fold_no = fold_no+1)
+        else:
+            raise Exception(f"invalid model name - {CFG.training.model}! Must be one of model1, model2, model3, model4")
 
         save_model_subdir = get_save_directory(CFG)
-
-        save_model_subdir = os.path.join(save_model_subdir,'no_scheduler')
-        if not os.path.exists(save_model_subdir):
-            os.makedirs(save_model_subdir)
 
         result_metrics = train(CFG = CFG, train_set = train_set, valid_set = valid_set, save_model_subdir = save_model_subdir, fold_no = fold_no + 1)
         
