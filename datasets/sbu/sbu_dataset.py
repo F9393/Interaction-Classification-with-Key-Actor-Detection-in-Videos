@@ -248,6 +248,7 @@ class M3_SBU_Dataset(M2_SBU_Dataset):
     """
     dataloader for phase 3 model
     """
+
     def __getitem__(self, index):
         pose_values = self.loaded_poses[index]
         pose_values = pose_values.view(pose_values.shape[0],2,self.keypoints_per_person)
@@ -255,6 +256,23 @@ class M3_SBU_Dataset(M2_SBU_Dataset):
 
         #pose_values : (#frames, #players, #keypoints_per_player)
         return pose_values, y
+
+class M4_SBU_Dataset(M2_SBU_Dataset):
+    """
+    dataloader for phase 4 model
+    """
+    def __getitem__(self, index): 
+        # load frames : shape (10,3,224,224)
+        frames = self.loaded_videos[index][0]
+
+        #load poses 
+        pose_values = self.loaded_poses[index]
+        pose_values = pose_values.view(pose_values.shape[0],2,self.keypoints_per_person)
+
+        y = torch.LongTensor([self.labels[index]])
+
+        # frames : (10,3,224,224) , pose_values : (10,2,30) (if only x,y otherwise (10,2,45))
+        return frames, pose_values, y
 
 if __name__ == "__main__":
 
@@ -284,19 +302,36 @@ if __name__ == "__main__":
         2, test_sets[0], select_frame, mode="valid", resize=resize, fold_no=1
     )
 
-    # sample_X, sample_y = M1_train_set[4]
-    # print(f"M1 : X shape {sample_X.shape}")
-    # print(f"M1 : y shape {sample_y}")
+    M4_train_set = M4_SBU_Dataset(
+        2, train_sets[0], select_frame, mode="train", resize=resize, fold_no=1
+    )
+    M4_valid_set = M4_SBU_Dataset(
+        2, test_sets[0], select_frame, mode="valid", resize=resize, fold_no=1
+    )
 
-    # print()
-    # sample_X, sample_y = M2_train_set[4]
-    # print(f"M2 : X shape {sample_X.shape}")
-    # print(f"M2 : y shape {sample_y}")
+
+    sample_X, sample_y = M1_train_set[4]
+    print(f"M1 : X shape {sample_X.shape}")
+    print(f"M1 : y {sample_y}")
+
+    print()
+    sample_X, sample_y = M2_train_set[4]
+    print(f"M2 : X shape {sample_X.shape}")
+    print(f"M2 : y {sample_y}")
 
     print()
     sample_X, sample_y = M3_train_set[4]
     print(f"M3 : X shape {sample_X.shape}")
-    print(f"M3 : y shape {sample_y}")
+    print(f"M3 : y {sample_y}")
+
+    print()
+    frames, poses, y = M4_train_set[4]
+    print(f"M3 : X shape ({frames.shape},{poses})")
+    print(f"M3 : y {y}")
+
+    # dts = torch.utils.data.DataLoader(M4_train_set,batch_size=8)
+    # vals = next(iter(dts))
+    # print(vals[1].shape)
 
     # print(f'first 10 train set folders : {train_set.folders[:10]}')
     # print(f'first 10 train set video lengths : {train_set.video_len[:10]}')

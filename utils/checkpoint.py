@@ -194,7 +194,7 @@ def get_save_directory(CFG):
     save_model_subdir = CFG.training.model
     save_model_subdir = os.path.join(
         save_model_subdir,
-        f"d={d},seed={sd},framew={framew},framefb={frame_forget_bias},eventw={eventw},eventfb={event_forget_bias},ep={eps}",
+        f"d={d},seed={sd},framew={framew},framefb={frame_forget_bias},eventw={eventw},eventfb={event_forget_bias},lr={lr},ep={eps}",
     )
 
     if CFG.training.model =='model3':
