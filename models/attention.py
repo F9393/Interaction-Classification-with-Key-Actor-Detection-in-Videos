@@ -21,7 +21,7 @@ class Attention1(nn.Module):
         
     def forward(self, query, keys, mask = None):
         """
-        query : (B,1,H) (prev LSTM hidden state)
+        query : (B,1,H) (prev eventLSTM hidden state)
         keys : (B,P,K) (batch_size, #players, #key_size) (key_size = number of keypoints)
         mask : (B,P)
         
@@ -34,27 +34,27 @@ class Attention1(nn.Module):
         proj_keys = self.key_layer(keys)
 
         # [B,1,H] + [B,P,H] = [B,P,H]
-        energies = torch.tanh(proj_query + proj_keys)
+        temp_sum = torch.tanh(proj_query + proj_keys)
         
-        # Calculate energies.
+        # Calculate raw_scores.
         # [B,P,H] -> [B,P]
-        energies = self.energy_layer(energies).squeeze(2)
-        
-        # Turn scores to probabilities.
-        # [B,P] -> [B,P]
-        alphas = F.softmax(energies, dim=1)   
+        raw_scores = self.energy_layer(temp_sum).squeeze(2)
 
         # Mask invalid positions.
         if mask is not None:
-            energies.data.masked_fill_(mask == 0, 0)
+            raw_scores.data.masked_fill_(mask == 0, -float('inf'))
         
+        # Turn scores to probabilities.
+        # [B,P] -> [B,P]
+        weights = F.softmax(raw_scores, dim=1)   
+
         # The context vector is the weighted sum of the values.
         # [B,P] -> [B,1,P]
         # [B,1,P] * [B,P,K] -> [B,1,K]
-        context = torch.bmm(alphas.unsqueeze(1), keys)
+        context = torch.bmm(weights.unsqueeze(1), keys)
 
-        # embeddings_shape: [B,1,K], alphas shape: [B,P]
-        return context, alphas
+        # embeddings_shape: [B,1,K], weights shape: [B,P]
+        return context, weights
 
 class Attention2(nn.Module):   
     """
@@ -77,7 +77,7 @@ class Attention2(nn.Module):
         
     def forward(self, query, keys, mask = None):
         """
-        query : (B,1,H) (prev LSTM hidden state)
+        query : (B,1,H) (prev eventLSTM hidden state)
         keys : (B,P,K) (batch_size, #players, #key_size) (key_size = number of keypoints)
         mask : (B,P)
         
@@ -90,24 +90,24 @@ class Attention2(nn.Module):
         concatenated = torch.cat([keys,repeat_query],2)
 
         # [B,P,K+H] -> [B,P]
-        energies = self.mlp(concatenated).squeeze(2)
-        
-        # Turn scores to probabilities.
-        # [B,P] -> [B,P]
-        alphas = F.softmax(energies, dim=1)   
+        raw_weights = self.mlp(concatenated).squeeze(2)
 
         # Mask invalid positions.
         if mask is not None:
-            energies.data.masked_fill_(mask == 0, 0)
+            raw_weights.data.masked_fill_(mask == 0, -float('inf'))
+        
+        # Turn scores to probabilities.
+        # [B,P] -> [B,P]
+        weights = F.softmax(raw_weights, dim=1)   
 
         # The context vector is the weighted sum of the values.
         # [B,P] -> [B,1,P]
         # [B,1,P] * [B,P,K] -> [B,1,K]
-        context = torch.bmm(alphas.unsqueeze(1), keys)
+        context = torch.bmm(weights.unsqueeze(1), keys)
         
-        # context shape: [B,1,K], alphas shape: [B,P]
+        # context shape: [B,1,K], weights shape: [B,P]
         # context is also the input to current time step of LSTM, so returned first
-        return context, alphas
+        return context, weights
 
 class Attention3(nn.Module):  
     """
@@ -148,36 +148,36 @@ class Attention3(nn.Module):
         concatenated = torch.cat([keys,repeat_query, repeat_frameLSTM_h],2)
 
         # [B,P,K+H_e+H_f] -> [B,P]
-        energies = self.mlp(concatenated).squeeze(2)
-
-        
-        # Turn scores to probabilities.
-        # [B,P] -> [B,P]
-        alphas = F.softmax(energies, dim=1)   
-
-        # same as softmax but with numerical stability. 
-        # b,_ = torch.max(energies, dim=1, keepdim=True)
-        # energies = torch.exp(energies - b)
-        # c = torch.sum(energies,1,keepdim=True) + 1.2e-38
-        # alphas = energies / c
+        raw_scores = self.mlp(concatenated).squeeze(2)
 
         # Mask invalid positions.
         if mask is not None:
-            energies.data.masked_fill_(mask == 0, 0)
+            raw_scores.data.masked_fill_(mask == 0, -float('inf'))
+        
+        # Turn scores to probabilities.
+        # [B,P] -> [B,P]
+        weights = F.softmax(raw_scores, dim=1)   
+
+        # same as softmax but with numerical stability. 
+        # b,_ = torch.max(raw_scores, dim=1, keepdim=True)
+        # raw_scores = torch.exp(raw_scores - b)
+        # c = torch.sum(raw_scores,1,keepdim=True) + 1.2e-38
+        # weights = raw_scores / c
+
 
         # The context vector is the weighted sum of the values.
         # [B,P] -> [B,1,P]
         # [B,1,P] * [B,P,K] -> [B,1,K]
-        context = torch.bmm(alphas.unsqueeze(1), keys)
+        context = torch.bmm(weights.unsqueeze(1), keys)
 
         # uncomment below return stmt. when we want to input only weighted pose vector to the eventLSTM.(another change has to be made in models.py for this to work)
-        # return context,alphas
+        # return context,weights
 
         # cat([B,1,K],[B,1,2*H_f]) -> [B,1,K+2*H_f]
         embeddings = torch.cat([context, frameLSTM_h], 2)
         
-        # embeddings shape: [B,1,K+2*H_f], alphas shape: [B,P]
-        return embeddings, alphas
+        # embeddings shape: [B,1,K+2*H_f], weights shape: [B,P]
+        return embeddings, weights
 
 if __name__ == "__main__":
     print('attention1 test')

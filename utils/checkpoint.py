@@ -65,20 +65,19 @@ class CheckPointer:
         saves best and last checkpoints
         """
 
-        if not self.save_dir:
-            return
-
         is_best = False
         if current_metrics[self.watch_metric] > self.best_metrics[self.watch_metric]:
             is_best = True
             self.best_metrics = current_metrics
+
+        if not self.save_dir:
+            return
 
         save_data = self.get_save_dict()
 
         self.save_dict(name=CheckPointer._last_checkpoint_name, save_data=save_data)
 
         if is_best:
-            self.best_metrics = current_metrics
             self.save_dict(name=CheckPointer._best_checkpoint_name, save_data=save_data)
             with open(os.path.join(self.save_dir, "best_results.txt"), "w") as f:
                 for key, val in self.best_metrics.items():
@@ -199,6 +198,8 @@ def get_save_directory(CFG):
 
     if CFG.training.model =='model3':
         save_model_subdir += f',attn={CFG.model3.attention_type}'
+
+    # save_model_subdir += ',sum_loss'
 
     return save_model_subdir
 
