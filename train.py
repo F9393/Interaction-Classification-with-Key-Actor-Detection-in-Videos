@@ -34,8 +34,8 @@ def evaluate(model, device, loader):
             output = model(*inps)
 
             loss = F.cross_entropy(output, y, reduction='sum')
-            val_loss += loss.item()                 
-            y_pred = torch.argmax(output, axis=1)  
+            val_loss += loss.item()
+            y_pred = torch.argmax(output, axis=1)
 
             right += torch.sum(y_pred == y)
 
@@ -55,9 +55,9 @@ def train(CFG, train_set, valid_set, save_model_subdir, fold_no = None, run_no =
         torch.backends.cudnn.benchmark = False
         torch.set_deterministic(True)
         os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
-    
-    use_cuda = torch.cuda.is_available()                  
-    device = torch.device("cuda" if use_cuda else "cpu")  
+
+    use_cuda = torch.cuda.is_available()
+    device = torch.device("cuda" if use_cuda else "cpu")
 
     if fold_no is not None:
         save_model_subdir = os.path.join(save_model_subdir, f"fold={fold_no}")
@@ -71,7 +71,7 @@ def train(CFG, train_set, valid_set, save_model_subdir, fold_no = None, run_no =
     save_tensorboard_dir = os.path.join(
         CFG.training.save_tensorboard_dir, save_model_subdir, current_time
     )
-    
+
     params = CFG.training.dataloader if use_cuda else {}
     train_loader = data.DataLoader(train_set, **params)
     valid_loader = data.DataLoader(valid_set, **params)
@@ -128,21 +128,21 @@ def train(CFG, train_set, valid_set, save_model_subdir, fold_no = None, run_no =
 
     best_metrics = {
         "val_accuracy" : -1,
-        "val_loss" : 1e6 
+        "val_loss" : 1e6
     }
     if not CFG.training.save_checkpoint:
         save_model_dir = None
-    checkpointer = CheckPointer(models = [model], optimizer = optimizer, scheduler = None, 
+    checkpointer = CheckPointer(models = [model], optimizer = optimizer, scheduler = None,
                                 save_dir = save_model_dir, best_metrics = best_metrics, watch_metric = "val_accuracy")
-    
+
     # display_sample_images(train_loader, writer)
     # display_model_graph(encoder, decoder, train_loader, writer)
 
-    for epoch in range(CFG.training.num_epochs): 
+    for epoch in range(CFG.training.num_epochs):
         model.train()
-        N_count = 0   
+        N_count = 0
         epoch_start_time = timeit.default_timer()
-        
+
         for batch_idx, (*inps,y) in enumerate(train_loader):
             batch_start_time = timeit.default_timer()
 
@@ -153,7 +153,7 @@ def train(CFG, train_set, valid_set, save_model_subdir, fold_no = None, run_no =
             N_count += inps[0].size(0)
             optimizer.zero_grad()
 
-            output = model(*inps)  
+            output = model(*inps)
             loss = F.cross_entropy(output, y)
 
             loss.backward()
@@ -162,28 +162,28 @@ def train(CFG, train_set, valid_set, save_model_subdir, fold_no = None, run_no =
             batch_count += 1
 
             if CFG.training.save_tensorboard:
-                writer.add_scalar('Loss/train', loss.item(), batch_count)  
+                writer.add_scalar('Loss/train', loss.item(), batch_count)
 
             batch_end_time = timeit.default_timer()
 
             if (batch_idx + 1) % CFG.training.log_interval == 0:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tTime:{:.3f}'.format(
-                    epoch + 1, N_count, len(train_loader.dataset), 100. * (batch_idx + 1) / len(train_loader), loss.item(), batch_end_time - batch_start_time))      
-        
+                    epoch + 1, N_count, len(train_loader.dataset), 100. * (batch_idx + 1) / len(train_loader), loss.item(), batch_end_time - batch_start_time))
+
         train_score, train_loss = evaluate(model, device, train_loader)
         val_score, val_loss = evaluate(model, device, valid_loader)
         print('\nTrain set : Average loss: {:.4f}, Accuracy: {:.6f}'.format(train_loss, train_score))
-        print('Val set : Average loss: {:.4f}, Accuracy: {:.6f}\n'.format(val_loss, val_score))
+        print('Val set : Average loss: {:.4f}, Accuracy: {:.6f}'.format(val_loss, val_score))
         if CFG.training.save_tensorboard:
             writer.add_scalar(f'Accuracy/train', train_score, epoch + 1)
             writer.add_scalar(f'Accuracy/val', val_score, epoch + 1)
             writer.add_scalar(f'Loss/val', val_loss, epoch + 1)
         # scheduler.step(val_score)
         checkpointer.save_checkpoint(current_metrics = {"val_accuracy" : val_score, "val_loss" : val_loss})
-        epoch_end_time = timeit.default_timer()  
+        epoch_end_time = timeit.default_timer()
         print(f'Epoch run time : {epoch_end_time-epoch_start_time:.3f}\n')
 
-    print(f'best metrics {checkpointer.best_metrics}')
+    print(f'BEST METRICS : {checkpointer.best_metrics}')
 
     return checkpointer.best_metrics
 
@@ -197,6 +197,9 @@ def main(DEF_CFG):
         decorator = repeat_k_times(num_runs)
         train = decorator(train)
 
+    save_model_subdir = get_save_directory(CFG)
+
+    folds_acc = []
     for fold_no in CFG.training.folds:
         if CFG.training.model == 'model1':
             train_set = M1_SBU_Dataset(train_sets[fold_no], CFG.training.select_frame, mode='train', resize=CFG.model1.resize, fold_no = fold_no+1)
@@ -213,16 +216,29 @@ def main(DEF_CFG):
         else:
             raise Exception(f"invalid model name - {CFG.training.model}! Must be one of model1, model2, model3, model4")
 
-        save_model_subdir = get_save_directory(CFG)
 
         result_metrics = train(CFG = CFG, train_set = train_set, valid_set = valid_set, save_model_subdir = save_model_subdir, fold_no = fold_no + 1)
-        
-        with open(os.path.join(CFG.training.save_model_path, save_model_subdir, f"fold={fold_no+1}", "best_results.txt"), "w") as f:
-            for key,val in result_metrics.items():
-                f.write(f"{key} : {val}\n")
+        folds_acc.append(result_metrics)
+
+        if CFG.training.save_checkpoint:
+            with open(os.path.join(CFG.training.save_model_path, save_model_subdir, f"fold={fold_no+1}", "average_results.txt"), "w") as f:
+                for key,val in result_metrics.items():
+                    f.write(f"{key} : {val}\n")
+
+   
+    folds_avg_metrics = {key:0 for key in folds_acc[0].keys()}
+    for fold_result in folds_acc:
+        for key,val in fold_result.items():
+            folds_avg_metrics[key] += val
+    for key in folds_avg_metrics:
+        folds_avg_metrics[key] /= len(folds_acc)
+    print(f'AVERAGED OVER FOLDS RESULT : {folds_avg_metrics}')
+
+    return folds_avg_metrics['val_accuracy'].item()
+
 
 
 if __name__ == "__main__":
     main()
 
-    
+

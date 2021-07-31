@@ -1,36 +1,36 @@
 defaults:
   - dataset: sbu
-  - override hydra/sweeper: ax
+#   - override hydra/sweeper: ax
 
-hydra:
-  sweeper:
-    # The following part of config is used to setup the Hydra Ax plugin and is optional
-    ax_config:
+# hydra:
+#   sweeper:
+#     # The following part of config is used to setup the Hydra Ax plugin and is optional
+#     ax_config:
 
-      # max_trials is application-specific. Tune it for your use case
-      max_trials: 15
+#       # max_trials is application-specific. Tune it for your use case
+#       max_trials: 15
 
-      experiment:
-        # Default to minimize, set to false to maximize
-        minimize: false
+#       experiment:
+#         # Default to minimize, set to false to maximize
+#         minimize: false
 
-      early_stop:
-        # Number of epochs without a significant improvement from
-        # the currently known best parameters
-        # An Epoch is defined as a batch of trials executed in parallel
-        max_epochs_without_improvement: 15
+#       early_stop:
+#         # Number of epochs without a significant improvement from
+#         # the currently known best parameters
+#         # An Epoch is defined as a batch of trials executed in parallel
+#         max_epochs_without_improvement: 15
 
-      # the synthetic measurements in this example have 0 error
-      # which is specified by setting is_noisy to false
-      is_noisy: true
+#       # the synthetic measurements in this example have 0 error
+#       # which is specified by setting is_noisy to false
+#       is_noisy: true
 
-      params:
-        dataset.training.learning_rate:
-          type: range
-          bounds: [0.0000001, 0.001]
-        # model4.frameLSTM.hidden_size:
-        #   type: range
-        #   bounds: [128, 512]
-        # model4.eventLSTM.hidden_size:
-        #   type: range
-        #   bounds: [128, 512]
+#       params:
+#         dataset.training.learning_rate:
+#           type: range
+#           bounds: [0.0000001, 0.001]
+#         dataset.model4.frameLSTM.hidden_size:
+#           type: range
+#           bounds: [128, 256]
+#         dataset.model4.eventLSTM.hidden_size:
+#           type: range
+#           bounds: [128, 256]
