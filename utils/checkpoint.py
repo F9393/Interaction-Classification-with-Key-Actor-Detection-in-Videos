@@ -65,20 +65,19 @@ class CheckPointer:
         saves best and last checkpoints
         """
 
-        if not self.save_dir:
-            return
-
         is_best = False
         if current_metrics[self.watch_metric] > self.best_metrics[self.watch_metric]:
             is_best = True
             self.best_metrics = current_metrics
+
+        if not self.save_dir:
+            return
 
         save_data = self.get_save_dict()
 
         self.save_dict(name=CheckPointer._last_checkpoint_name, save_data=save_data)
 
         if is_best:
-            self.best_metrics = current_metrics
             self.save_dict(name=CheckPointer._best_checkpoint_name, save_data=save_data)
             with open(os.path.join(self.save_dir, "best_results.txt"), "w") as f:
                 for key, val in self.best_metrics.items():
@@ -161,40 +160,30 @@ def get_save_directory(CFG):
 
     model = getattr(CFG, CFG.training.model)
     
-    framew = eventw = frame_forget_bias = event_forget_bias = "default"
+    f_w = e_w = f_fb = e_fb = "default" # f_w = frameLSTM weight, f_fb = frameLSTM forget bias
 
     if "frameLSTM" in model:
-        if "winit" not in model.frameLSTM or model.frameLSTM.winit is None:
-            framew = "default"
-        else:
-            framew = model.frameLSTM.winit
-        if (
-            "forget_gate_bias" not in model.frameLSTM
-            or model.frameLSTM.forget_gate_bias is None
-        ):
-            frame_forget_bias = "default"
-        else:
-            frame_forget_bias = model.frameLSTM.forget_gate_bias
+        if "winit" in model.frameLSTM and model.frameLSTM.winit is not None:
+            f_w = model.frameLSTM.winit
+        if "forget_gate_bias" in model.frameLSTM and model.frameLSTM.forget_gate_bias is not None:
+            f_fb = model.frameLSTM.forget_gate_bias
+        f_h = model.frameLSTM.hidden_size
+
     if "eventLSTM" in model:
-        if "winit" not in model.eventLSTM or model.eventLSTM.winit is None:
-            eventw = "default"
-        else:
-            eventw = model.eventLSTM.winit
-        if (
-            "forget_gate_bias" not in model.eventLSTM
-            or model.eventLSTM.forget_gate_bias is None
-        ):
-            event_forget_bias = "default"
-        else:
-            event_forget_bias = model.eventLSTM.forget_gate_bias
-    lr = CFG.training.learning_rate
+        if "winit" in model.eventLSTM and model.eventLSTM.winit is not None:
+            e_w = model.eventLSTM.winit
+        if "forget_gate_bias" in model.eventLSTM and model.eventLSTM.forget_gate_bias is not None:
+            e_fb = model.eventLSTM.forget_gate_bias
+        e_h = model.eventLSTM.hidden_size
+
+    lr = float(f'{CFG.training.learning_rate:.6f}')
     eps  = CFG.training.num_epochs
     
 
     save_model_subdir = CFG.training.model
     save_model_subdir = os.path.join(
         save_model_subdir,
-        f"d={d},seed={sd},framew={framew},framefb={frame_forget_bias},eventw={eventw},eventfb={event_forget_bias},lr={lr},ep={eps}",
+        f"d={d},seed={sd},f_w={f_w},f_fb={f_fb},f_h={f_h},e_w={e_w},e_fb={e_fb},e_h={e_h},lr={lr},ep={eps}",
     )
 
     if CFG.training.model =='model3':

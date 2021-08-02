@@ -1,4 +1,4 @@
----
+---  
   training:    
     dataloader:
       batch_size: 16
@@ -6,8 +6,8 @@
       shuffle: true
       pin_memory: true
     select_frame: 10   
-    num_epochs: 600  
-    learning_rate: 1e-4
+    num_epochs: 200
+    learning_rate: 0.0020524444144465422
     lr_patience: 10
     log_interval: 1
     save_checkpoint: true
@@ -59,11 +59,10 @@
     pose_dim: 30
     pose_coord: 2 # 2=>(x,y), 3=>(x,y,z)
     frameLSTM:
-      hidden_size: 256
+      hidden_size: 167
       winit: "default"
       forget_gate_bias: "default"
     eventLSTM:  
-      hidden_size: 256 
+      hidden_size: 179
       winit: "default"
       forget_gate_bias: "default"
-  
