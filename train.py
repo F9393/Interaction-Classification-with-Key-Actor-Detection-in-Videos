@@ -192,7 +192,7 @@ def main(DEF_CFG):
     CFG = DEF_CFG.dataset
 
     global train
-    if not CFG.training.deterministic:
+    if not CFG.training.deterministic and CFG.training.num_runs!=1:
         num_runs = CFG.training.num_runs
         decorator = repeat_k_times(num_runs)
         train = decorator(train)

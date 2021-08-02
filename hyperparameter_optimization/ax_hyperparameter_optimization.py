@@ -61,6 +61,20 @@ opt_parameters = [
         "bounds": [128,256],
         "value_type": "int",  # Optional, defaults to inference from type of "bounds".
         "log_scale": False,  # Optional, defaults to False.
+    },
+    {
+        "name": "dataset.model4.attention_params.hidden_size",
+        "type": "range",
+        "bounds": [16,512],
+        "value_type": "int",  # Optional, defaults to inference from type of "bounds".
+        "log_scale": False,  # Optional, defaults to False.
+    },
+    {
+        "name": "dataset.model4.attention_params.bias",
+        "type": "range",
+        "bounds": [-5,5],
+        "value_type": "float",  # Optional, defaults to inference from type of "bounds".
+        "log_scale": False,  # Optional, defaults to False.
     }
 ]
 
@@ -106,7 +120,7 @@ def do_train(parameters):
 # In[ ]:
 
 
-for i in range(15):
+for i in range(20):
     curr_params, trial_index = ax_client.get_next_trial()
     ax_client.complete_trial(trial_index=trial_index, raw_data=do_train(curr_params))
 

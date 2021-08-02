@@ -147,7 +147,7 @@ class Model3(nn.Module):
         return out[:,-1,:] 
 
 class Model4(nn.Module):
-    def __init__(self, frameLSTM, CNN_embed_dim, eventLSTM, pose_dim, num_classes, **kwargs):
+    def __init__(self, frameLSTM, CNN_embed_dim, eventLSTM, pose_dim, num_classes, attention_params, **kwargs):
         """
         Phase-4 Model
 
@@ -173,10 +173,11 @@ class Model4(nn.Module):
         super(Model4, self).__init__()
         self.encoder = Encoder(CNN_embed_dim = CNN_embed_dim)
         self.frameLSTM = FrameLSTM(input_size = CNN_embed_dim, **frameLSTM)
-        self.eventLSTM = EventLSTM(input_size = pose_dim + 2 * frameLSTM['hidden_size'], **eventLSTM)
+        # self.eventLSTM = EventLSTM(input_size = pose_dim + 2 * frameLSTM['hidden_size'], **eventLSTM)
+        self.eventLSTM = EventLSTM(input_size = 4 * frameLSTM['hidden_size'], **eventLSTM)
         # uncomment below stmt. and comment above stmt when we want to input only weighted pose vector to eventLSTM (another change has to be made in attention.py for this to work)
         # self.eventLSTM = EventLSTM(input_size = pose_dim, **eventLSTM)
-        self.attention = Attention3(pose_dim, eventLSTM['hidden_size'], frameLSTM['hidden_size'])
+        self.attention = Attention3(pose_dim, eventLSTM['hidden_size'], frameLSTM['hidden_size'], attention_params)
         self.fc = nn.Linear(in_features = eventLSTM['hidden_size'], out_features = num_classes)
 
         self.eventLSTM_h_dim = eventLSTM['hidden_size']
