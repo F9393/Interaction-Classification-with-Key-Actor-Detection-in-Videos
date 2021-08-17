@@ -25,6 +25,7 @@ from datasets.sbu.sbu_dataset import  M1_SBU_Dataset, M2_SBU_Dataset, M3_SBU_Dat
 import pytorch_lightning as pl
 from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning import Callback
+from pytorch_lightning.callbacks.progress import ProgressBar
 from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks import ModelCheckpoint
 
@@ -32,6 +33,8 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 class KeyActorDetection(pl.LightningModule):
     def __init__(self, CFG):
         super(KeyActorDetection, self).__init__()
+
+        self.CFG = CFG
         if CFG.training.model == 'model1':
             self.model = Model1(**CFG.model1)
         elif CFG.training.model == 'model2':
@@ -45,6 +48,9 @@ class KeyActorDetection(pl.LightningModule):
         # in lightning, forward defines the prediction/inference actions
         out = self.model(x)
         return out
+    
+    def on_train_start(self):
+        self.logger.log_hyperparams(self.CFG)
 
     def training_step(self, batch, batch_idx):
         # training_step defined the train loop.
@@ -53,8 +59,7 @@ class KeyActorDetection(pl.LightningModule):
         y = y.view(-1,)
         out = self.model(*inps)
         loss = F.cross_entropy(out, y)
-        
-        self.log("train_loss", loss)
+        self.logger.log_metrics({"train_loss":loss.item()}, step=self.trainer.current_epoch)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -78,16 +83,14 @@ class KeyActorDetection(pl.LightningModule):
 
         val_accuracy = sum_correct_pred * 1.0 / sum_all_pred
         
-        self.log('step', self.trainer.current_epoch)
-        self.log_dict(
-            {"val_accuracy" :val_accuracy, "val_loss": mean_loss}, prog_bar=True
+        self.logger.log_metrics(
+            {"val_accuracy" :val_accuracy, "val_loss": mean_loss}, step=self.trainer.current_epoch
         )
 
+        self.trainer.progress_bar_dict['val_acc'] = val_accuracy
 
     def configure_optimizers(self):
         return self.model.optimizer()
-
-
 
 def main():
     hydra.initialize(config_path="configs")
@@ -97,8 +100,8 @@ def main():
     
     model = KeyActorDetection(CFG)
  
-
-    tb_logger = pl_loggers.TensorBoardLogger("logs/")
+    mlf_logger = pl_loggers.mlflow.MLFlowLogger(experiment_name="model4")
+    # tb_logger = pl_loggers.TensorBoardLogger(save_dir = './logs')
 
     checkpoint_callback = ModelCheckpoint(monitor='val_accuracy',
                                           save_top_k=1,
@@ -114,7 +117,7 @@ def main():
         accumulate_grad_batches=1,
         precision=32,
         callbacks=[checkpoint_callback],
-        logger=tb_logger,
+        logger=mlf_logger,
         weights_summary='top',
         log_every_n_steps=1,
         # accelerator = "ddp"
