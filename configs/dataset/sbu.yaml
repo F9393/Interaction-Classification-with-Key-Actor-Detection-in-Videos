@@ -4,20 +4,20 @@
       batch_size: 16
       num_workers: 4
       shuffle: true
-      pin_memory: true
+      pin_memory: false
     select_frame: 10   
-    num_epochs: 200
-    learning_rate: 0.0020524444144465422
+    num_epochs: 300
+    learning_rate: 0.002175482870728186
     lr_patience: 10
     log_interval: 1
-    save_checkpoint: true
-    save_tensorboard: true
+    save_checkpoint: false
+    save_tensorboard: false
     deterministic: false
     save_model_path: "/usr/local/data01/rohitram/sbu-snapshots/"
     save_tensorboard_dir: "/usr/local/data01/rohitram/sbu-snapshots/"
     pytorch_seed: 0
-    folds: [0,1,2,3,4]
-    num_runs: 5
+    folds: [0]
+    num_runs: 1
     model: "model4"
 
   model1: 
@@ -59,10 +59,13 @@
     pose_dim: 30
     pose_coord: 2 # 2=>(x,y), 3=>(x,y,z)
     frameLSTM:
-      hidden_size: 167
+      hidden_size: 242
       winit: "default"
       forget_gate_bias: "default"
     eventLSTM:  
-      hidden_size: 179
+      hidden_size: 233
       winit: "default"
       forget_gate_bias: "default"
+    attention_params:
+      hidden_size: 306
+      bias: true

@@ -69,13 +69,6 @@ opt_parameters = [
         "value_type": "int",  # Optional, defaults to inference from type of "bounds".
         "log_scale": False,  # Optional, defaults to False.
     },
-    {
-        "name": "dataset.model4.attention_params.bias",
-        "type": "range",
-        "bounds": [-5,5],
-        "value_type": "float",  # Optional, defaults to inference from type of "bounds".
-        "log_scale": False,  # Optional, defaults to False.
-    }
 ]
 
 
