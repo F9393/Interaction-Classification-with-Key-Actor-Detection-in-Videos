@@ -11,6 +11,8 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch.utils.data as data
 from torch.utils.tensorboard import SummaryWriter
 
+import torchmetrics
+
 from omegaconf import DictConfig, OmegaConf
 import hydra
 import hydra.compose, hydra.initialize
@@ -43,6 +45,8 @@ class KeyActorDetection(pl.LightningModule):
             self.model = Model3(**CFG.model3)
         elif CFG.training.model == 'model4':
             self.model = Model4(**CFG.model4)
+            
+        self.accuracy = torchmetrics.Accuracy()
 
     def forward(self, x):
         # in lightning, forward defines the prediction/inference actions
@@ -59,7 +63,7 @@ class KeyActorDetection(pl.LightningModule):
         y = y.view(-1,)
         out = self.model(*inps)
         loss = F.cross_entropy(out, y)
-        self.logger.log_metrics({"train_loss":loss.item()}, step=self.trainer.current_epoch)
+        self.log("train_loss",loss,sync_dist=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -69,29 +73,19 @@ class KeyActorDetection(pl.LightningModule):
         loss = F.cross_entropy(out, y).item()
         
         y_pred = torch.argmax(out, axis=1)
-        correct_pred = torch.sum(y_pred == y).item()
-        total_pred = y.size(0)
-
-        return loss, correct_pred, total_pred
-
-    def validation_epoch_end(self, validation_step_outputs):
-        all_losses, all_correct_pred,all_pred = zip(*validation_step_outputs)
-
-        mean_loss = np.mean(all_losses)
-        sum_correct_pred = sum(all_correct_pred)
-        sum_all_pred = sum(all_pred)
-
-        val_accuracy = sum_correct_pred * 1.0 / sum_all_pred
         
-        self.logger.log_metrics(
-            {"val_accuracy" :val_accuracy, "val_loss": mean_loss}, step=self.trainer.current_epoch
-        )
+        #rank 0 accuracy. Call to self.accuracy() needed to accumulate batch metrics.
+        self.log('val_acc_step', self.accuracy(y_pred, y), logger=False)
 
-        self.trainer.progress_bar_dict['val_acc'] = val_accuracy
+    def validation_epoch_end(self, val_step_outputs):
+        self.log('val_acc_epoch', self.accuracy.compute(), logger=False, prog_bar=True)
+        self.logger.log_metrics({"val_acc_epoch": self.accuracy.compute().item()}, step = self.trainer.current_epoch)
+        self.accuracy.reset()
 
     def configure_optimizers(self):
         return self.model.optimizer()
-
+        
+        
 def main():
     hydra.initialize(config_path="configs")
     DEF_CFG = hydra.compose(config_name="config")
@@ -101,15 +95,16 @@ def main():
     model = KeyActorDetection(CFG)
  
     mlf_logger = pl_loggers.mlflow.MLFlowLogger(experiment_name="model4")
-    # tb_logger = pl_loggers.TensorBoardLogger(save_dir = './logs')
 
-    checkpoint_callback = ModelCheckpoint(monitor='val_accuracy',
+    checkpoint_callback = ModelCheckpoint(monitor='val_acc_epoch',
                                           save_top_k=1,
                                           save_last=True,
                                           save_weights_only=True,
                                           filename='checkpoint/{epoch:02d}-{valid_score:.4f}',
                                           verbose=False,
                                           mode='max')
+#     seed_everything(42)
+    
 
     trainer = Trainer(
         max_epochs=CFG.training.num_epochs,
@@ -120,7 +115,10 @@ def main():
         logger=mlf_logger,
         weights_summary='top',
         log_every_n_steps=1,
-        # accelerator = "ddp"
+        # accelerator = "ddp",
+#         progress_bar_refresh_rate=0,
+#         deterministic=True,
+        num_sanity_val_steps=0
     )
 
     folds_acc = []
