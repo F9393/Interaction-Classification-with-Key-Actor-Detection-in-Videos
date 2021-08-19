@@ -8,14 +8,8 @@ import glob
 import pickle
 
 
-# path to store pickle files containing loaded RGB images and pose values
-folds_cache_path = "/usr/local/data01/rohitram/sbu-snapshots/folds-path"
-if not os.path.exists(folds_cache_path):
-    os.makedirs(folds_cache_path)
-
-
-class SBU_Dataset(data.Dataset):
-    def __init__(self, set_paths, select_frames, mode, resize=224, fold_no=None, **kwargs):
+class BaseSBUDataset(data.Dataset):
+    def __init__(self, set_paths, select_frames, stage, resize, fold_no, data_dir, cache_folds, use_cache, **kwargs):
         """
         Dataset class containing utility functions to load individual instances of training data.
         This class does NOT implement __getitem__. New classes must be written that inherit from
@@ -31,7 +25,7 @@ class SBU_Dataset(data.Dataset):
             paths to the participant sets (e.g '../../s01s02')
         select_frames : int
             these number of frames will be selected from the middle of each video
-        mode : string
+        stage : string
             one of "train" or "test"
         resize: int
             all frames will be resized to (resize,resize)
@@ -40,49 +34,43 @@ class SBU_Dataset(data.Dataset):
 
         """
 
-        self.folders, self.labels, self.video_len = list(
-            zip(*self.get_video_data(set_paths))
-        )
+        self.data_dir = data_dir
         self.select_frames = select_frames
-        self.mode = mode
+        self.stage = stage
         self.loaded_videos = None
         self.fold_no = fold_no
-        self.transform = transforms.Compose(
-            [
-                transforms.Resize([resize, resize]),
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                ),
-            ]
-        )
+        self.resize = resize
 
-        if mode == "train":
-            if fold_no is None:
-                loaded_dataset_path = os.path.join(folds_cache_path, f"sbu_train.pkl")
-            else:
-                loaded_dataset_path = os.path.join(
-                    folds_cache_path, f"sbu_train_fold={fold_no}.pkl"
-                )
-            if os.path.exists(loaded_dataset_path):
-                with open(loaded_dataset_path, "rb") as f:
-                    self.loaded_videos = pickle.load(f)
-        if mode == "valid":
-            if fold_no is None:
-                loaded_dataset_path = os.path.join(folds_cache_path, f"sbu_valid.pkl")
-            else:
-                loaded_dataset_path = os.path.join(
-                    folds_cache_path, f"sbu_valid_fold={fold_no}.pkl"
-                )
-            if os.path.exists(loaded_dataset_path):
-                with open(loaded_dataset_path, "rb") as f:
-                    self.loaded_videos = pickle.load(f)
-        if self.loaded_videos is None:
-            self.loaded_videos = self.load_videos()
-            with open(loaded_dataset_path, "wb") as f:
-                pickle.dump(self.loaded_videos, f)
+        if stage == "train" or stage == "val":
+            self.transform = transforms.Compose(
+                [
+                    transforms.Resize([resize, resize]),
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                    ),
+                ]
+            )
 
-    def get_video_data(self, set_paths):
+        folds_cache_path = os.path.join(self.data_dir, "folds_cache")
+        
+        loaded_dataset_path = os.path.join(
+                folds_cache_path, f"sbu_{stage}_fold={fold_no}.pkl"
+            )
+        if os.path.exists(loaded_dataset_path) and use_cache:
+            print(f"using cached {stage} data.")
+            with open(loaded_dataset_path, "rb") as f:
+                self.loaded_videos = pickle.load(f)
+        else:
+            self.loaded_videos = self._load_videos(set_paths)
+            if cache_folds:
+                os.makedirs(folds_cache_path, exist_ok=True)
+                with open(loaded_dataset_path, "wb") as f:
+                    print(f"writing {stage} data to cache.")
+                    pickle.dump(self.loaded_videos, f)
+
+
+    def _get_video_metdata(self, set_paths):
         """
         Gets meta data from the dataset.
 
@@ -118,10 +106,10 @@ class SBU_Dataset(data.Dataset):
                     all_data.append((run_path, label, num_frames))
         return all_data
 
-    def load_videos(self):
+    def _load_videos(self, set_paths):
         """
         Reads RGB images and pose data with the help of meta-data found
-        after function call to get_video_data().
+        after function call to _get_video_metdata().
 
         Parameters
         ----------
@@ -137,43 +125,46 @@ class SBU_Dataset(data.Dataset):
 
         """
 
+        self.folders, self.labels, self.video_len = list(
+            zip(*self._get_video_metdata(set_paths))
+        )
+
         # load image data
         loaded_videos = []
-        print(f"Loading {self.mode} Data!")
-        for index, video_pth in enumerate(tqdm(self.folders)):
-            video_len = self.video_len[index]
-            start_idx = (video_len - self.select_frames) // 2
-            end_idx = start_idx + self.select_frames
+        with tqdm(self.folders) as pbar:
+            pbar.set_description(f"Loading {self.stage} Data to RAM!")
+            for index, video_pth in enumerate(pbar):
+                video_len = self.video_len[index]
+                start_idx = (video_len - self.select_frames) // 2
+                end_idx = start_idx + self.select_frames
 
-            frame_pths = sorted(glob.glob(f"{video_pth}/rgb*"))
-            reqd_frame_pths = frame_pths[start_idx:end_idx]
-            loaded_frames = []
-            for frame_pth in reqd_frame_pths:
-                frame = Image.open(frame_pth).convert("RGB")
-                frame = self.transform(frame) if self.transform is not None else frame # impose transformation if exists
-                loaded_frames.append(frame.squeeze_(0))
-            loaded_frames = torch.stack(loaded_frames, dim=0)
+                frame_pths = sorted(glob.glob(f"{video_pth}/rgb*"))
+                reqd_frame_pths = frame_pths[start_idx:end_idx]
+                loaded_frames = []
+                loaded_frames = torch.zeros(self.select_frames, 3, self.resize, self.resize, dtype=torch.float32)
+                for idx, frame_pth in enumerate(reqd_frame_pths):
+                    frame = Image.open(frame_pth).convert("RGB")
+                    frame = self.transform(frame) if self.transform is not None else frame # impose transformation if exists
+                    loaded_frames[idx] = frame
 
-            # load pose data
-            with open(os.path.join(video_pth, "skeleton_pos.txt"), "r") as f:
-                pose_data = f.readlines()
+                # load pose data
+                with open(os.path.join(video_pth, "skeleton_pos.txt"), "r") as f:
+                    pose_data = f.readlines()
 
-            assert len(frame_pths) == len(pose_data), "pose data loaded incorrectly"
+                assert len(frame_pths) == len(pose_data), "pose data loaded incorrectly"
 
-            reqd_pose_data = pose_data[start_idx:end_idx]
+                reqd_pose_data = pose_data[start_idx:end_idx]
 
-            video_pose_values = []
-            for row in reqd_pose_data:
-                posture_data = [x.strip() for x in row.split(",")]
-                frame_pose_values = [float(x) for x in posture_data[1:]]
-                assert len(frame_pose_values) == 90, "incorrect number of pose values"
+                video_pose_values = []
+                for row in reqd_pose_data:
+                    posture_data = [x.strip() for x in row.split(",")]
+                    frame_pose_values = [float(x) for x in posture_data[1:]]
+                    assert len(frame_pose_values) == 90, "incorrect number of pose values"
+                    video_pose_values.append(frame_pose_values)  
+                video_pose_values = torch.tensor(video_pose_values, dtype=torch.float32)
 
-                video_pose_values.append(frame_pose_values)  
-
-            video_pose_values = torch.tensor(video_pose_values, dtype=torch.float32)
-
-            #loaded_frames : (10,3,224,224), video_pose_values : (10,90)
-            loaded_videos.append((loaded_frames, video_pose_values))
+                #loaded_frames : (10,3,224,224), video_pose_values : (10,90)
+                loaded_videos.append((loaded_frames, video_pose_values))
 
         assert len(loaded_videos) == len(
             self.folders
@@ -188,24 +179,27 @@ class SBU_Dataset(data.Dataset):
         raise NotImplementedError()
 
 
-class M1_SBU_Dataset(SBU_Dataset):
+class M1_SBU_Dataset(BaseSBUDataset):
     """
     dataloader for phase 1 model
     """
+    def __len__(self):
+        return len(self.loaded_videos)
+
     def __getitem__(self, index):
         X = self.loaded_videos[index][0]
         y = torch.LongTensor([self.labels[index]])
         return X, y
 
 
-class M2_SBU_Dataset(SBU_Dataset):
+class M2_SBU_Dataset(BaseSBUDataset):
     """
     dataloader for phase 2 model
     """
     def __init__(self, dim, *args, **kwargs):
         """
         Reads RGB images and pose data with the help of meta-data found
-        after function call to get_video_data().
+        after function call to _get_video_metdata().
 
         Parameters
         ----------
@@ -282,7 +276,7 @@ if __name__ == "__main__":
     resize = 224
 
     M1_train_set = M1_SBU_Dataset(
-        train_sets[0], select_frame, mode="train", resize=resize, fold_no=1
+        train_sets[0], select_frame, "train", resize=resize, fold_no=1
     )
     M1_valid_set = M1_SBU_Dataset(
         test_sets[0], select_frame, mode="valid", resize=resize, fold_no=1

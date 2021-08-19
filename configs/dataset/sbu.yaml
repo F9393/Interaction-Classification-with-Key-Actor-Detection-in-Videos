@@ -1,9 +1,17 @@
----  
+--- 
+  dataset_path: "./sbu_dataset"
+  cache_folds:  true # videos in folds will be transformed with given resize and pickled. Make sure to delete the cache if you want to use new transforms. 
+  use_cache: true # use previously cached folds.
   training:    
-    dataloader:
+    train_dataloader:
       batch_size: 16
       num_workers: 4
       shuffle: true
+      pin_memory: false
+    val_dataloader:
+      batch_size: 16
+      num_workers: 4
+      shuffle: false
       pin_memory: false
     select_frame: 10   
     num_epochs: 300
@@ -18,7 +26,7 @@
     pytorch_seed: 0
     folds: [0]
     num_runs: 1
-    model: "model4"
+    model: "model2"
 
   model1: 
     resize: 224       
