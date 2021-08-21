@@ -11,8 +11,6 @@ import pytorch_lightning as pl
 class Model1(nn.Module):
     def __init__(self, frameLSTM, eventLSTM, CNN_embed_dim, num_classes, **kwargs):
         """
-        Phase-1 Model
-
         Parameters
         ----------
         frameLSTM: dictionary 
@@ -40,10 +38,6 @@ class Model1(nn.Module):
             in_features=eventLSTM["hidden_size"], out_features=num_classes
         )
 
-        # initialize FC layer
-        # nn.init.constant_(self.fc.bias, 0.0)
-        # nn.init.xavier_normal_(self.fc.weight)
-
     def forward(self, x):
         """
         x : shape (B,T,C,H,W)
@@ -57,20 +51,27 @@ class Model1(nn.Module):
 
         e_out, (e_h_n, e_h_c) = self.eventLSTM(f_out)
 
-        B, T, H = e_out.shape  # batch,time_step,hidden_size
+        # batch,time_step,hidden_size
+        B, T, H = e_out.shape
 
-        out = self.fc(
-            e_out
-        )  # pass output hidden states of all time steps to the same FC layer (will be needed for hinge loss)
+        # pass output hidden states of all time steps to the same FC layer (TO-DO: sum losses from all time steps)
+        out = self.fc(e_out)
 
-        return out[:, -1, :]  # return last time step for now
+        # return last time step
+        return out[:, -1, :]
+
+    def _get_parameters(self):
+        return (
+            list(self.encoder.embedding_layer.parameters())
+            + list(self.frameLSTM.parameters())
+            + list(self.eventLSTM.parameters())
+            + list(self.fc.parameters())
+        )
 
 
 class Model2(nn.Module):
     def __init__(self, eventLSTM, pose_dim, num_classes, **kwargs):
         """
-        Phase-2 Model
-
         Parameters
         ----------
         eventLSTM: dictionary 
@@ -100,20 +101,19 @@ class Model2(nn.Module):
 
         e_out, (e_h_n, e_h_c) = self.eventLSTM(x)
 
-        B, T, H = e_out.shape  # batch,time_step,hidden_size
+        B, T, H = e_out.shape
 
-        out = self.fc(
-            e_out
-        )  # pass output hidden states of all time steps to the same FC layer (will be needed for hinge loss)
+        out = self.fc(e_out)
 
-        return out[:, -1, :]  # return last time step for now
+        return out[:, -1, :]
+
+    def _get_parameters(self):
+        return list(self.parameters())
 
 
 class Model3(nn.Module):
     def __init__(self, eventLSTM, pose_dim, num_classes, attention_type, **kwargs):
         """
-        Phase-3 Model
-
         Parameters
         ----------
         eventLSTM: dictionary 
@@ -150,21 +150,23 @@ class Model3(nn.Module):
         out : shape (B,O)
         
         """
-        out = torch.zeros(x.size(0), 1, self.hidden_size, device=torch.device("cuda"))
-        hidden = torch.zeros(
-            1, x.size(0), self.hidden_size, device=torch.device("cuda")
-        )
-        cell = torch.zeros(1, x.size(0), self.hidden_size, device=torch.device("cuda"))
+
+        device = x.device
+        out = torch.zeros(x.size(0), 1, self.hidden_size).to(device)
+        hidden = torch.zeros(1, x.size(0), self.hidden_size).to(device)
+        cell = torch.zeros(1, x.size(0), self.hidden_size).to(device)
 
         for t in range(x.size(1)):
             embeddings, _ = self.attention(out, x[:, t, :, :])
-
             out, (hidden, cell) = self.eventLSTM(embeddings, (hidden, cell))
 
         # [B,1,H] -> [B,1,O]
         out = self.fc(out)
 
         return out[:, -1, :]
+
+    def _get_parameters(self):
+        return list(self.parameters())
 
 
 class Model4(nn.Module):
@@ -197,6 +199,11 @@ class Model4(nn.Module):
             dimension of pose vector (30 if pose_coord = 2 else 45 if pose_coord=3)
         num_classes : int
             number of output classes of model
+        attention_params:
+            dictionary containing "hidden_size" key for hidden dim. size of attention mlp and
+            "bias" key that takes a bool value. If true, bias is used for all layers in mlp otherwise
+            no bias in all layers of the attention mlp. 
+            
         
         """
 
@@ -250,16 +257,14 @@ class Model4(nn.Module):
 
         return out[:, -1, :]
 
-    def optimizer(self):
-        optimizer = torch.optim.Adam(
+    def _get_parameters(self):
+        return (
             list(self.encoder.embedding_layer.parameters())
             + list(self.frameLSTM.parameters())
             + list(self.eventLSTM.parameters())
             + list(self.attention.parameters())
-            + list(self.fc.parameters()),
-            lr=1e-3,
+            + list(self.fc.parameters())
         )
-        return optimizer
 
 
 if __name__ == "__main__":
@@ -285,24 +290,24 @@ if __name__ == "__main__":
 
     print()
     print(f"Model 3 Test")
-    inp = torch.randn((2, 10, 5, 30), device="cuda")  # (B,T,P,I)
+    inp = torch.randn((2, 10, 5, 30))  # (B,T,P,I)
     m3 = Model3(
         eventLSTM={"hidden_size": 128}, pose_dim=30, num_classes=8, attention_type=2
-    ).cuda()
+    )
     out = m3(inp)
     print(out.shape)
 
     print()
     print(f"Model 4 Test")
-    frame_inp = torch.randn((2, 10, 3, 224, 224), device="cuda")
-    pose_inp = torch.randn((2, 10, 5, 30), device="cuda")  # (B,T,P,I)
-    inp = (frame_inp, pose_inp)
+    frame_inp = torch.randn((2, 10, 3, 224, 224))
+    pose_inp = torch.randn((2, 10, 5, 30))  # (B,T,P,I)
     m4 = Model4(
         frameLSTM={"hidden_size": 128},
         CNN_embed_dim=32,
         eventLSTM={"hidden_size": 128},
         pose_dim=30,
         num_classes=8,
-    ).cuda()
-    out = m4(inp)
+        attention_params={"hidden_size":64, "bias":True}
+    )
+    out = m4(frame_inp,pose_inp)
     print(out.shape)

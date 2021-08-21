@@ -1,35 +1,16 @@
-import os
-import numpy as np
-import timeit
-from datetime import datetime
-
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-import torch.utils.data as data
-from torch.utils.tensorboard import SummaryWriter
-
 import torchmetrics
 
-from omegaconf import DictConfig, OmegaConf
-import hydra
-import hydra.compose, hydra.initialize
-
-from utils.checkpoint import CheckPointer, get_save_directory
-from utils.display import display_sample_images, display_model_graph
-from utils.training_utils import repeat_k_times
-from models.models import Model1, Model2, Model3, Model4
-from datasets.sbu.train_test_split import train_sets, test_sets # generates K-fold train and test sets
-from datasets.sbu.sbu_dataset import  M1_SBU_Dataset, M2_SBU_Dataset, M3_SBU_Dataset, M4_SBU_Dataset
+from omegaconf import OmegaConf
 
 import pytorch_lightning as pl
 from pytorch_lightning import Trainer, seed_everything
-from pytorch_lightning import Callback
-from pytorch_lightning.callbacks.progress import ProgressBar
 from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks import ModelCheckpoint
+
+from models.models import Model1, Model2, Model3, Model4
+from datasets.sbu.sbu_datamodule import SBUDataModule
 
 
 class KeyActorDetection(pl.LightningModule):
@@ -45,6 +26,8 @@ class KeyActorDetection(pl.LightningModule):
             self.model = Model3(**CFG.model3)
         elif CFG.training.model == 'model4':
             self.model = Model4(**CFG.model4)
+        else:
+            raise ValueError(f'model "{CFG.training.model}" does not exist! Must be one of "model1", "model2", "model2", "model4"')
             
         self.accuracy = torchmetrics.Accuracy()
 
@@ -71,98 +54,71 @@ class KeyActorDetection(pl.LightningModule):
         y = y.view(-1,)
         out = self.model(*inps)
         loss = F.cross_entropy(out, y).item()
-        
         y_pred = torch.argmax(out, axis=1)
         
         #rank 0 accuracy. Call to self.accuracy() needed to accumulate batch metrics.
         self.log('val_acc_step', self.accuracy(y_pred, y), logger=False)
 
     def validation_epoch_end(self, val_step_outputs):
-        self.log('val_acc_epoch', self.accuracy.compute(), logger=False, prog_bar=True)
-        self.logger.log_metrics({"val_acc_epoch": self.accuracy.compute().item()}, step = self.trainer.current_epoch)
+        print(f"acc = {self.accuracy.compute()}")
+        self.log('val_acc_epoch', self.accuracy.compute(), logger=True, prog_bar=True)
+        # if self.global_rank == 0:
+        #     self.logger.log_metrics({"val_acc_epoch": self.accuracy.compute().item()}, step = self.trainer.current_epoch)
         self.accuracy.reset()
 
     def configure_optimizers(self):
-        return self.model.optimizer()
+        optimizer = torch.optim.Adam(self.model._get_parameters(), lr=self.CFG.training.learning_rate)
+        return optimizer
         
         
 def main():
-    hydra.initialize(config_path="configs")
-    DEF_CFG = hydra.compose(config_name="config")
-    CFG = DEF_CFG.dataset
 
-    
-    model = KeyActorDetection(CFG)
- 
-    mlf_logger = pl_loggers.mlflow.MLFlowLogger(experiment_name="model4")
+    cfg = OmegaConf.load('configs/sbu.yaml')
+    cli_cfg = OmegaConf.from_cli()
+    CFG = OmegaConf.merge(cfg, cli_cfg)
 
-    checkpoint_callback = ModelCheckpoint(monitor='val_acc_epoch',
-                                          save_top_k=1,
-                                          save_last=True,
-                                          save_weights_only=True,
-                                          filename='checkpoint/{epoch:02d}-{valid_score:.4f}',
-                                          verbose=False,
-                                          mode='max')
-#     seed_everything(42)
-    
-
-    trainer = Trainer(
-        max_epochs=CFG.training.num_epochs,
-        gpus=[0],
-        accumulate_grad_batches=1,
-        precision=32,
-        callbacks=[checkpoint_callback],
-        logger=mlf_logger,
-        weights_summary='top',
-        log_every_n_steps=1,
-        # accelerator = "ddp",
-#         progress_bar_refresh_rate=0,
-#         deterministic=True,
-        num_sanity_val_steps=0
-    )
-
-    folds_acc = []
     for fold_no in CFG.training.folds:
-        if CFG.training.model == 'model1':
-            train_set = M1_SBU_Dataset(train_sets[fold_no], CFG.training.select_frame, mode='train', resize=CFG.model1.resize, fold_no = fold_no+1)
-            valid_set = M1_SBU_Dataset(test_sets[fold_no], CFG.training.select_frame, mode='valid', resize=CFG.model1.resize, fold_no = fold_no+1)
-        elif CFG.training.model == 'model2':
-            train_set = M2_SBU_Dataset(CFG.model2.pose_coord, train_sets[fold_no], CFG.training.select_frame, mode='train', resize=CFG.model1.resize, fold_no = fold_no+1)
-            valid_set = M2_SBU_Dataset(CFG.model2.pose_coord, test_sets[fold_no], CFG.training.select_frame, mode='valid', resize=CFG.model1.resize, fold_no = fold_no+1)
-        elif CFG.training.model == 'model3':
-            train_set = M3_SBU_Dataset(CFG.model3.pose_coord, train_sets[fold_no], CFG.training.select_frame, mode='train', resize=CFG.model1.resize, fold_no = fold_no+1)
-            valid_set = M3_SBU_Dataset(CFG.model3.pose_coord, test_sets[fold_no], CFG.training.select_frame, mode='valid', resize=CFG.model1.resize, fold_no = fold_no+1)
-        elif CFG.training.model == 'model4':
-            train_set = M4_SBU_Dataset(CFG.model3.pose_coord, train_sets[fold_no], CFG.training.select_frame, mode='train', resize=CFG.model1.resize, fold_no = fold_no+1)
-            valid_set = M4_SBU_Dataset(CFG.model3.pose_coord, test_sets[fold_no], CFG.training.select_frame, mode='valid', resize=CFG.model1.resize, fold_no = fold_no+1)
-        else:
-            raise Exception(f"invalid model name - {CFG.training.model}! Must be one of model1, model2, model3, model4")
+        for run_no in range(1,CFG.training.num_runs+1):
+            # os.environ['CUBLAS_WORKSPACE_CONFIG'] = ":4096:8"
+            # torch.backends.cudnn.deterministic = True
+            # torch.backends.cudnn.benchmark = False
+            # torch.use_deterministic_algorithms(True)
+            # np.random.seed(42)
+            # random.seed(42)
 
-        params = CFG.training.dataloader
-#         print(params)
-        train_loader = data.DataLoader(train_set, **params)
-        valid_loader = data.DataLoader(valid_set, **params)
+            dm = SBUDataModule(CFG)
+            dm.prepare_data()
+
+            seed_everything(42, workers=True)
+
+            model = KeyActorDetection(CFG)
+            dm.setup(fold_no = fold_no)
+            mlf_logger = pl_loggers.mlflow.MLFlowLogger(experiment_name=CFG.training.model, run_name = f'fold={fold_no},run={run_no}')
+            checkpoint_callback = ModelCheckpoint(dirpath=None,
+                                                monitor='val_acc_epoch',
+                                                save_top_k=1,
+                                                save_last=True,
+                                                save_weights_only=True,
+                                                filename='{epoch:02d}-{val_acc_epoch:.4f}',
+                                                verbose=False,
+                                                mode='max')
         
-        trainer.fit(model, train_dataloader=train_loader, val_dataloaders=valid_loader)
-    
-#         result_metrics = train(CFG = CFG, train_set = train_set, valid_set = valid_set, save_model_subdir = save_model_subdir, fold_no = fold_no + 1)
-#         folds_acc.append(result_metrics)
+            trainer = Trainer(
+                max_epochs=CFG.training.num_epochs,
+                gpus=[0],
+                precision=32,
+                callbacks=[checkpoint_callback],
+                logger=mlf_logger,
+                weights_summary='top',
+                log_every_n_steps=1,
+                # accelerator = "ddp",
+                # progress_bar_refresh_rate=0,
+                deterministic=True,
+                # num_sanity_val_steps=0
+            )
 
-#         if CFG.training.save_checkpoint:
-#             with open(os.path.join(CFG.training.save_model_path, save_model_subdir, f"fold={fold_no+1}", "average_results.txt"), "w") as f:
-#                 for key,val in result_metrics.items():
-#                     f.write(f"{key} : {val}\n")
+            trainer.fit(model, dm)
 
-   
-#     folds_avg_metrics = {key:0 for key in folds_acc[0].keys()}
-#     for fold_result in folds_acc:
-#         for key,val in fold_result.items():
-#             folds_avg_metrics[key] += val
-#     for key in folds_avg_metrics:
-#         folds_avg_metrics[key] /= len(folds_acc)
-#     print(f'AVERAGED OVER FOLDS RESULT : {folds_avg_metrics}')
-
-#     return folds_avg_metrics['val_accuracy'].item()
 
 
 

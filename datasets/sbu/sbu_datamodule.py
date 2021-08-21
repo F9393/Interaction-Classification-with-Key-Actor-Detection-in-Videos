@@ -54,13 +54,13 @@ class SBUDataModule(pl.LightningDataModule):
 
         if "resize" in CFG[CFG.training.model]:
             self.resize = CFG[CFG.training.model]["resize"]
-        elif CFG.cache_folds:
+        elif CFG.caching.cache_folds:
             print(
                 "NOTE : Although frame features are not used for this model, folds will be cached after resizing images to 224x224. Delete cache or set 'use_cache' in config to false and run again if you want to resize to another dimension."
             )
-            self.resize = 224
+            self.resize = 16
         else:
-            self.resize = 224
+            self.resize = 16
 
         self.select_frames = 10
 
@@ -68,9 +68,10 @@ class SBUDataModule(pl.LightningDataModule):
         if os.path.exists(self.data_dir):
             data_files = os.listdir(self.data_dir)
             if set(self.sets).issubset(set(data_files)):
+                print("Dataset Found.")
                 return
             if set([i for i in range(1, 22)]).issubset(set(data_files)):
-                print("removing extra directory (1,2...21)")
+                print("Found dataset. Removing extra directory (1,2...21).")
                 for i in range(1, 22):
                     number_path = os.path.join(self.data_dir, str(i))
                     shutil.move(glob.glob(f"{number_path}{os.sep}s*")[0], number_path)
@@ -103,7 +104,10 @@ class SBUDataModule(pl.LightningDataModule):
             "http://vision.cs.stonybrook.edu/~kiwon/Datasets/SBU_Kinect_Interactions/s07s03.zip",
         ]
 
-        os.makedirs(self.data_dir, exist_ok=True)
+        if not os.path.exists(self.data_dir):
+            raise Exception(
+                f"directory {self.data_dir} not found! Create directory and re-run."
+            )
 
         with tqdm(range(1, 22)) as pbar:
             for i in pbar:
@@ -132,16 +136,21 @@ class SBUDataModule(pl.LightningDataModule):
                 shutil.rmtree(target_path)
 
     def setup(self, fold_no):  # fold_no should be in [1,2,3,4,5]
-
         train_sets = []
         val_sets = []
 
         all_sets = np.array(self.sets)
         for fold in self.folds:
             ind = np.array(fold) - 1
-            val_sets.append(np.core.defchararray.add(self.data_dir.rstrip(os.sep) + os.sep, all_sets[ind]))
+            val_sets.append(
+                np.core.defchararray.add(
+                    self.data_dir.rstrip(os.sep) + os.sep, all_sets[ind]
+                )
+            )
             train_sets.append(
-                np.core.defchararray.add(self.data_dir.rstrip(os.sep) + os.sep, np.delete(all_sets, ind))
+                np.core.defchararray.add(
+                    self.data_dir.rstrip(os.sep) + os.sep, np.delete(all_sets, ind)
+                )
             )
             assert (
                 len(train_sets[-1]) + len(val_sets[-1]) == 21
@@ -158,8 +167,7 @@ class SBUDataModule(pl.LightningDataModule):
                 self.resize,
                 fold_no,
                 self.data_dir,
-                self.CFG.cache_folds,
-                self.CFG.use_cache,
+                **self.CFG.caching,
             )
             self.val_dataset = M1_SBU_Dataset(
                 reqd_val_set_paths,
@@ -168,8 +176,7 @@ class SBUDataModule(pl.LightningDataModule):
                 self.resize,
                 fold_no,
                 self.data_dir,
-                self.CFG.cache_folds,
-                self.CFG.use_cache,
+                **self.CFG.caching,
             )
         elif self.CFG.training.model == "model2":
             self.train_dataset = M2_SBU_Dataset(
@@ -180,8 +187,7 @@ class SBUDataModule(pl.LightningDataModule):
                 self.resize,
                 fold_no,
                 self.data_dir,
-                self.CFG.cache_folds,
-                self.CFG.use_cache,
+                **self.CFG.caching,
             )
             self.val_dataset = M2_SBU_Dataset(
                 self.CFG["model2"].pose_coord,
@@ -191,8 +197,7 @@ class SBUDataModule(pl.LightningDataModule):
                 self.resize,
                 fold_no,
                 self.data_dir,
-                self.CFG.cache_folds,
-                self.CFG.use_cache,
+                **self.CFG.caching,
             )
         elif self.CFG.training.model == "model3":
             self.train_dataset = M3_SBU_Dataset(
@@ -203,8 +208,7 @@ class SBUDataModule(pl.LightningDataModule):
                 self.resize,
                 fold_no,
                 self.data_dir,
-                self.CFG.cache_folds,
-                self.CFG.use_cache,
+                **self.CFG.caching,
             )
             self.val_dataset = M3_SBU_Dataset(
                 self.CFG["model3"].pose_coord,
@@ -214,8 +218,7 @@ class SBUDataModule(pl.LightningDataModule):
                 self.resize,
                 fold_no,
                 self.data_dir,
-                self.CFG.cache_folds,
-                self.CFG.use_cache,
+                **self.CFG.caching,
             )
         elif self.CFG.training.model == "model4":
             self.train_dataset = M4_SBU_Dataset(
@@ -226,8 +229,7 @@ class SBUDataModule(pl.LightningDataModule):
                 self.resize,
                 fold_no,
                 self.data_dir,
-                self.CFG.cache_folds,
-                self.CFG.use_cache,
+                **self.CFG.caching,
             )
             self.val_dataset = M4_SBU_Dataset(
                 self.CFG["model4"].pose_coord,
@@ -237,8 +239,7 @@ class SBUDataModule(pl.LightningDataModule):
                 self.resize,
                 fold_no,
                 self.data_dir,
-                self.CFG.cache_folds,
-                self.CFG.use_cache,
+                **self.CFG.caching,
             )
         else:
             raise ValueError(f"invalid model name : {self.CFG.training.model}")
@@ -247,7 +248,7 @@ class SBUDataModule(pl.LightningDataModule):
         return DataLoader(self.train_dataset, **self.CFG.training.train_dataloader)
 
     def val_dataloader(self):
-        return DataLoader(self.train_dataset, **self.CFG.training.val_dataloader)
+        return DataLoader(self.val_dataset, **self.CFG.training.val_dataloader)
 
 
 if __name__ == "__main__":
@@ -256,6 +257,42 @@ if __name__ == "__main__":
     hydra.initialize(config_path="../../configs")
     DEF_CFG = hydra.compose(config_name="config")
     CFG = DEF_CFG.dataset
+
+    print("\nModel 1 Test")
+    CFG.training.model = "model1"
     dm = SBUDataModule(CFG)
     dm.prepare_data()
     dm.setup(fold_no=1)
+    for batch in dm.train_dataloader():
+        print(f"frames = {batch[0].shape} , y = {batch[1].shape}")
+        break
+
+    print("\nModel 2 Test")
+    CFG.training.model = "model2"
+    dm = SBUDataModule(CFG)
+    dm.prepare_data()
+    dm.setup(fold_no=1)
+    for batch in dm.train_dataloader():
+        print(f"pose = {batch[0].shape} , y = {batch[1].shape}")
+        break
+
+    print("\nModel 3 Test")
+    CFG.training.model = "model3"
+    dm = SBUDataModule(CFG)
+    dm.prepare_data()
+    dm.setup(fold_no=1)
+    for batch in dm.train_dataloader():
+        print(f"pose = {batch[0].shape} , y = {batch[1].shape}")
+        break
+
+    print("\nModel 4 Test")
+    CFG.training.model = "model4"
+    dm = SBUDataModule(CFG)
+    dm.prepare_data()
+    dm.setup(fold_no=1)
+    for batch in dm.train_dataloader():
+        print(
+            f"frames = {batch[0].shape} , pose = {batch[1].shape}, y = {batch[2].shape}"
+        )
+        break
+
