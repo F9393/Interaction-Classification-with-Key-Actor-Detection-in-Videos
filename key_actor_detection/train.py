@@ -92,21 +92,19 @@ def train(CFG):
         
             trainer = Trainer(
                 max_epochs=CFG.training.num_epochs,
-                gpus=[0],
+                gpus=CFG.gpus,
                 precision=32,
                 callbacks=[checkpoint_callback],
                 logger = mlf_logger,
                 weights_summary='top',
-                log_every_n_steps=1,
+                log_every_n_steps=4,
                 deterministic=CFG.deterministic.set,
-                # accelerator = "ddp",
-                num_sanity_val_steps=0
+                accelerator = "ddp" if len(CFG.gpus)>1 else None,
             )
 
             trainer.fit(model, dm)
 
             best_model_score = checkpoint_callback.best_model_score
-            results.append(best_model_score)
 
             print(f'\nBest model val acc on fold={fold_no},run={run_no} = {best_model_score}')
 

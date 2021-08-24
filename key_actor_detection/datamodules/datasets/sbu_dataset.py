@@ -91,7 +91,7 @@ class BaseSBUDataset(data.Dataset):
 
             self.loaded_videos = self._load_videos()
 
-            if cache_folds:
+            if os.getenv("SLURM_LOCALID", '0') == '0' and cache_folds:
                 with open(loaded_dataset_path, "wb") as f:
                     print(f"Writing {stage} fold {fold_no} to cache.")
                     pickle.dump(self.loaded_videos, f)

@@ -67,7 +67,7 @@ if __name__ == "__main__":
     #     outcome_constraints=["l2norm <= 1.25"],  # Optional.
     )
 
-    for i in range(3):
+    for i in range(15):
         curr_params, trial_index = ax_client.get_next_trial()
         ax_client.complete_trial(trial_index=trial_index, raw_data=do_train(CFG, curr_params))
 

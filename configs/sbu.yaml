@@ -6,6 +6,8 @@ caching:
   use_cache: true # use previously cached folds.
   folds_cache_path: "./datasets/sbu/cache"
 
+gpus: [0,1]
+
 training:    
   train_dataloader:
     batch_size: 16
