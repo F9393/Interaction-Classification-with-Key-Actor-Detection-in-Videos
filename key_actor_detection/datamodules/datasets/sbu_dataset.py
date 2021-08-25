@@ -5,7 +5,6 @@ import torchvision.transforms as transforms
 from torch.utils import data
 from tqdm import tqdm
 import glob
-import pickle
 
 
 class BaseSBUDataset(data.Dataset):
@@ -17,9 +16,6 @@ class BaseSBUDataset(data.Dataset):
         resize,
         fold_no,
         data_dir,
-        cache_folds,
-        use_cache,
-        folds_cache_path,
         **kwargs,
     ):
         """
@@ -44,13 +40,6 @@ class BaseSBUDataset(data.Dataset):
             if using K-fold CV, fold_no is incorporated in name of saved pickle file 
         data_dir: string
             dataset path
-        cache_folds: bool
-            whether the loaded data be pickled and saved into folds_cache_path
-        use_cache: bool
-            whether to use previously saved pickle file, skipping reading images and pose from dataset 
-        folds_cache_path: string
-            if cache_folds is true, the training and val sets for this particular fold will be pickled and 
-            saved into folds_cache_path
 
         """
 
@@ -76,25 +65,7 @@ class BaseSBUDataset(data.Dataset):
             zip(*self._get_video_metdata(set_paths))
         )
 
-        loaded_dataset_path = os.path.join(
-            folds_cache_path, f"sbu_{stage}_fold={fold_no}.pkl"
-        )
-        if os.path.exists(loaded_dataset_path) and use_cache:
-            print(f"Using cached {stage} data.")
-            with open(loaded_dataset_path, "rb") as f:
-                self.loaded_videos = pickle.load(f)
-        else:
-            if cache_folds and not os.path.exists(folds_cache_path):
-                raise Exception(
-                    f"Directory {folds_cache_path} not found! Create directory and re-run."
-                )
-
-            self.loaded_videos = self._load_videos()
-
-            if os.getenv("SLURM_LOCALID", '0') == '0' and cache_folds:
-                with open(loaded_dataset_path, "wb") as f:
-                    print(f"Writing {stage} fold {fold_no} to cache.")
-                    pickle.dump(self.loaded_videos, f)
+        self.loaded_videos = self._load_videos()
 
     def _get_video_metdata(self, set_paths):
         """

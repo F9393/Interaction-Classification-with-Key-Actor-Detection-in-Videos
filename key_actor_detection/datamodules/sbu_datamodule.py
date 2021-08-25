@@ -54,13 +54,11 @@ class SBUDataModule(pl.LightningDataModule):
 
         if "resize" in CFG[CFG.training.model]:
             self.resize = CFG[CFG.training.model]["resize"]
-        elif CFG.caching.cache_folds:
-            print(
-                "NOTE : Although frame features are not used for this model, folds will be cached after resizing images to 224x224. Delete cache or set 'use_cache' in config to false and run again if you want to resize to another dimension."
-            )
-            self.resize = 16
         else:
-            self.resize = 16
+            print(
+                "NOTE : Frame features not used for this model. Resizing to 224x224."
+            )
+            self.resize = 224
 
         self.select_frames = 10
 
@@ -167,8 +165,7 @@ class SBUDataModule(pl.LightningDataModule):
                 "train",
                 self.resize,
                 fold_no,
-                self.data_dir,
-                **self.CFG.caching,
+                self.data_dir
             )
             self.val_dataset = M1_SBU_Dataset(
                 reqd_val_set_paths,
@@ -176,8 +173,7 @@ class SBUDataModule(pl.LightningDataModule):
                 "val",
                 self.resize,
                 fold_no,
-                self.data_dir,
-                **self.CFG.caching,
+                self.data_dir
             )
         elif self.CFG.training.model == "model2":
             self.train_dataset = M2_SBU_Dataset(
@@ -187,8 +183,7 @@ class SBUDataModule(pl.LightningDataModule):
                 "train",
                 self.resize,
                 fold_no,
-                self.data_dir,
-                **self.CFG.caching,
+                self.data_dir
             )
             self.val_dataset = M2_SBU_Dataset(
                 self.CFG["model2"].pose_coord,
@@ -197,8 +192,7 @@ class SBUDataModule(pl.LightningDataModule):
                 "val",
                 self.resize,
                 fold_no,
-                self.data_dir,
-                **self.CFG.caching,
+                self.data_dir
             )
         elif self.CFG.training.model == "model3":
             self.train_dataset = M3_SBU_Dataset(
@@ -208,8 +202,7 @@ class SBUDataModule(pl.LightningDataModule):
                 "train",
                 self.resize,
                 fold_no,
-                self.data_dir,
-                **self.CFG.caching,
+                self.data_dir
             )
             self.val_dataset = M3_SBU_Dataset(
                 self.CFG["model3"].pose_coord,
@@ -218,8 +211,7 @@ class SBUDataModule(pl.LightningDataModule):
                 "val",
                 self.resize,
                 fold_no,
-                self.data_dir,
-                **self.CFG.caching,
+                self.data_dir
             )
         elif self.CFG.training.model == "model4":
             self.train_dataset = M4_SBU_Dataset(
@@ -229,8 +221,7 @@ class SBUDataModule(pl.LightningDataModule):
                 "train",
                 self.resize,
                 fold_no,
-                self.data_dir,
-                **self.CFG.caching,
+                self.data_dir
             )
             self.val_dataset = M4_SBU_Dataset(
                 self.CFG["model4"].pose_coord,
@@ -239,8 +230,7 @@ class SBUDataModule(pl.LightningDataModule):
                 "val",
                 self.resize,
                 fold_no,
-                self.data_dir,
-                **self.CFG.caching,
+                self.data_dir
             )
         else:
             raise ValueError(f"invalid model name : {self.CFG.training.model}")

@@ -1,12 +1,6 @@
-name: "sbu"
 dataset_path: "./datasets/sbu"
 
-caching:
-  cache_folds:  true # videos in folds will be transformed with given resize and pickled. Make sure to delete the cache if you want to use new transforms. 
-  use_cache: true # use previously cached folds.
-  folds_cache_path: "./datasets/sbu/cache"
-
-gpus: [0,1]
+gpus: [0]
 
 training:    
   train_dataloader:
@@ -20,11 +14,10 @@ training:
   select_frame: 10   
   num_epochs: 5
   learning_rate: 0.002
-  save_dir: "/usr/local/data01/rohitram/mlruns"
+  save_dir: "./mlruns"
   folds: [1] # choose from 1,2,3,4,5
   num_runs: 1 # each fold will be run these many times
   model: "model4"
-
 deterministic:
   set: true
   seed: 50
