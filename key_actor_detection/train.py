@@ -44,7 +44,7 @@ class KeyActorDetection(pl.LightningModule):
         y = y.view(-1,)
         out = self.model(*inps)
         loss = F.cross_entropy(out, y)
-        self.log("train_loss",loss,sync_dist=True)
+        self.log("train_loss",loss,sync_dist=True,rank_zero_only=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -55,11 +55,11 @@ class KeyActorDetection(pl.LightningModule):
         y_pred = torch.argmax(out, axis=1)
         
         #accuracy of rank 0 process (logs called only on rank 0) . Call to self.accuracy() needed to accumulate batch metrics.
-        self.log('val_acc_step', self.accuracy(y_pred, y), logger=False)
+        self.log('val_acc_step', self.accuracy(y_pred, y), logger=False, rank_zero_only=True)
 
     def validation_epoch_end(self, val_step_outputs):
         # print(f"acc = {self.accuracy.compute()}")
-        self.log('val_acc_epoch', self.accuracy.compute(), logger=False, prog_bar=True)
+        self.log('val_acc_epoch', self.accuracy.compute(), logger=False, prog_bar=True, rank_zero_only=True)
         self.logger.log_metrics({"val_acc_epoch": self.accuracy.compute().item()}, step = self.trainer.current_epoch)
         self.accuracy.reset()
 
@@ -102,10 +102,8 @@ def train(CFG):
                 accelerator = "ddp" if len(CFG.gpus)>1 else None,
             )
 
-            trainer.fit(model, dm)
+            trainer.fit(model,dm)
 
-            best_model_score = checkpoint_callback.best_model_score
-
-            print(f'\nBest model val acc on fold={fold_no},run={run_no} = {best_model_score}')
+            results.append(checkpoint_callback.best_model_score)
 
     return np.mean(results), np.std(results)
