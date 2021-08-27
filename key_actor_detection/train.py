@@ -30,9 +30,9 @@ class KeyActorDetection(pl.LightningModule):
             raise ValueError(f'model "{CFG.training.model}" does not exist! Must be one of "model1", "model2", "model2", "model4"')
             
         self.accuracy = torchmetrics.Accuracy()
+        self.best_val_acc = -1
 
     def forward(self, x):
-        # used during test time
         out = self.model(x)
         return out
     
@@ -55,12 +55,13 @@ class KeyActorDetection(pl.LightningModule):
         y_pred = torch.argmax(out, axis=1)
         
         #accuracy of rank 0 process (logs called only on rank 0) . Call to self.accuracy() needed to accumulate batch metrics.
-        self.log('val_acc_step', self.accuracy(y_pred, y), logger=False, rank_zero_only=True)
+        self.log("val_loss_epoch", loss, logger=True, on_step=False, on_epoch=True, sync_dist=True, rank_zero_only=True)
+        self.log('val_acc_step', self.accuracy(y_pred, y), logger=False)
 
     def validation_epoch_end(self, val_step_outputs):
-        # print(f"acc = {self.accuracy.compute()}")
-        self.log('val_acc_epoch', self.accuracy.compute(), logger=False, prog_bar=True, rank_zero_only=True)
+        self.log('val_acc_epoch', self.accuracy.compute(), logger=False, prog_bar=True)
         self.logger.log_metrics({"val_acc_epoch": self.accuracy.compute().item()}, step = self.trainer.current_epoch)
+        self.best_val_acc = max(self.best_val_acc, self.accuracy.compute().item())
         self.accuracy.reset()
 
     def configure_optimizers(self):
@@ -83,8 +84,8 @@ def train(CFG):
             mlf_logger = pl_loggers.mlflow.MLFlowLogger(experiment_name=CFG.training.model, run_name = f'fold={fold_no},run={run_no}', save_dir=CFG.training.save_dir)
             checkpoint_callback = ModelCheckpoint(dirpath=None,
                                                 monitor='val_acc_epoch',
-                                                save_top_k=1,
-                                                save_last=True,
+                                                save_top_k=1 if CFG.training.save_dir else 0,
+                                                save_last=True if CFG.training.save_dir else False,
                                                 save_weights_only=True,
                                                 filename='{epoch:02d}-{val_acc_epoch:.4f}',
                                                 verbose=False,
@@ -92,6 +93,7 @@ def train(CFG):
         
             trainer = Trainer(
                 max_epochs=CFG.training.num_epochs,
+                num_nodes=CFG.num_nodes,
                 gpus=CFG.gpus,
                 precision=32,
                 callbacks=[checkpoint_callback],
@@ -104,6 +106,6 @@ def train(CFG):
 
             trainer.fit(model,dm)
 
-            results.append(checkpoint_callback.best_model_score)
+            results.append(model.best_val_acc)
 
     return np.mean(results), np.std(results)
