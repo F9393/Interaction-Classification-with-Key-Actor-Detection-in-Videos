@@ -1,7 +1,13 @@
 dataset_path: "./datasets/sbu"
 
-gpus: [0]
+num_nodes: 1 # number of nodes
+gpus: [0] # list of gpu indices on each node
 
+caching:
+  cache_folds:  true # videos in folds will be transformed with given resize and pickled. Make sure to delete the cache if you want to use new transforms. 
+  use_cache: true # use previously cached folds.
+  folds_cache_path: "./datasets/sbu/folds_cache"
+  
 training:    
   train_dataloader:
     batch_size: 16
@@ -14,10 +20,11 @@ training:
   select_frame: 10   
   num_epochs: 5
   learning_rate: 0.002
-  save_dir: "./mlruns"
+  save_dir: "./mlruns" #null for no saving
   folds: [1] # choose from 1,2,3,4,5
   num_runs: 1 # each fold will be run these many times
   model: "model4"
+
 deterministic:
   set: true
   seed: 50

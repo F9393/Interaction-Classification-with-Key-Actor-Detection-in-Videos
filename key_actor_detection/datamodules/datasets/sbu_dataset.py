@@ -5,7 +5,7 @@ import torchvision.transforms as transforms
 from torch.utils import data
 from tqdm import tqdm
 import glob
-
+import pickle
 
 class BaseSBUDataset(data.Dataset):
     def __init__(
@@ -16,6 +16,9 @@ class BaseSBUDataset(data.Dataset):
         resize,
         fold_no,
         data_dir,
+        cache_folds,
+        use_cache,
+        folds_cache_path,
         **kwargs,
     ):
         """
@@ -43,6 +46,8 @@ class BaseSBUDataset(data.Dataset):
 
         """
 
+        # set_paths = [set_paths[0]]
+
         self.data_dir = data_dir
         self.select_frames = select_frames
         self.stage = stage
@@ -65,7 +70,25 @@ class BaseSBUDataset(data.Dataset):
             zip(*self._get_video_metdata(set_paths))
         )
 
-        self.loaded_videos = self._load_videos()
+        loaded_dataset_path = os.path.join(
+            folds_cache_path, f"sbu_{stage}_fold={fold_no}.pkl"
+        )
+        if os.path.exists(loaded_dataset_path) and use_cache:
+            print(f"Using cached {stage} data.")
+            with open(loaded_dataset_path, "rb") as f:
+                self.loaded_videos = pickle.load(f)
+        else:
+            if cache_folds and not os.path.exists(folds_cache_path):
+                raise Exception(
+                    f"Directory {folds_cache_path} not found! Create directory and re-run."
+                )
+
+            self.loaded_videos = self._load_videos()
+
+            if os.getenv("SLURM_LOCALID", '0') == '0' and cache_folds:
+                with open(loaded_dataset_path, "wb") as f:
+                    print(f"Writing {stage} fold {fold_no} to cache.")
+                    pickle.dump(self.loaded_videos, f)
 
     def _get_video_metdata(self, set_paths):
         """
@@ -122,9 +145,11 @@ class BaseSBUDataset(data.Dataset):
         """
 
         # load image data
-        loaded_videos = []
+        all_video_frames = torch.zeros(len(self.folders), self.select_frames, 3, self.resize, self.resize)
+        all_video_poses = torch.zeros(len(self.folders), self.select_frames, 90)
         with tqdm(self.folders) as pbar:
             pbar.set_description(f"Reading {self.stage} fold {self.fold_no} data!")
+
             for index, video_pth in enumerate(pbar):
                 video_len = self.video_len[index]
                 start_idx = (video_len - self.select_frames) // 2
@@ -132,7 +157,6 @@ class BaseSBUDataset(data.Dataset):
 
                 frame_pths = sorted(glob.glob(f"{video_pth}/rgb*"))
                 reqd_frame_pths = frame_pths[start_idx:end_idx]
-                loaded_frames = []
                 loaded_frames = torch.zeros(
                     self.select_frames, 3, self.resize, self.resize, dtype=torch.float32
                 )
@@ -143,6 +167,8 @@ class BaseSBUDataset(data.Dataset):
                     )  # impose transformation if exists
                     loaded_frames[idx] = frame
 
+                all_video_frames[index] = loaded_frames
+
                 # load pose data
                 with open(os.path.join(video_pth, "skeleton_pos.txt"), "r") as f:
                     pose_data = f.readlines()
@@ -151,27 +177,22 @@ class BaseSBUDataset(data.Dataset):
 
                 reqd_pose_data = pose_data[start_idx:end_idx]
 
-                video_pose_values = []
-                for row in reqd_pose_data:
+                video_pose_values = torch.zeros(self.select_frames, 90, dtype=torch.float32)
+                for frame_idx, row in enumerate(reqd_pose_data):
                     posture_data = [x.strip() for x in row.split(",")]
-                    frame_pose_values = [float(x) for x in posture_data[1:]]
+                    frame_pose_values = torch.tensor([float(x) for x in posture_data[1:]])
                     assert (
                         len(frame_pose_values) == 90
                     ), "incorrect number of pose values"
-                    video_pose_values.append(frame_pose_values)
-                video_pose_values = torch.tensor(video_pose_values, dtype=torch.float32)
 
-                # loaded_frames : (10,3,224,224), video_pose_values : (10,90)
-                loaded_videos.append((loaded_frames, video_pose_values))
+                    video_pose_values[frame_idx] = frame_pose_values
 
-        assert len(loaded_videos) == len(
-            self.folders
-        ), "error in reading images of videos"
-
-        return loaded_videos
+                all_video_poses[index] = video_pose_values
+            
+        return {"frames":all_video_frames, "poses":all_video_poses}
 
     def __len__(self):
-        return len(self.loaded_videos)
+        return len(self.folders)
 
     def __getitem__(self, index):
         raise NotImplementedError()
@@ -181,12 +202,9 @@ class M1_SBU_Dataset(BaseSBUDataset):
     """
     dataloader for model 1.
     """
-
-    def __len__(self):
-        return len(self.loaded_videos)
-
+    
     def __getitem__(self, index):
-        X = self.loaded_videos[index][0]
+        X = self.loaded_videos['frames'][index]
         y = torch.LongTensor([self.labels[index]])
         return X, y
 
@@ -203,10 +221,10 @@ class M2_SBU_Dataset(BaseSBUDataset):
 
         if dim == 2:
             idxs = torch.tensor([i for i in range(90) if (i + 1) % 3 != 0])
-            self.loaded_poses = [x[1][:, idxs] for x in self.loaded_videos]
+            self.loaded_poses = [x[:, idxs] for x in self.loaded_videos['poses']]
             self.keypoints_per_person = 30
         elif dim == 3:
-            self.loaded_poses = [x[1] for x in self.loaded_videos]
+            self.loaded_poses = self.loaded_videos['poses']
             self.keypoints_per_person = 45
         else:
             raise Exception("invalid dim in M2_SBU_Dataset! Must be either 2 or 3.")
@@ -245,7 +263,7 @@ class M4_SBU_Dataset(M2_SBU_Dataset):
 
     def __getitem__(self, index):
         # load frames : shape (10,3,224,224)
-        frames = self.loaded_videos[index][0]
+        frames = self.loaded_videos['frames'][index]
 
         # load poses
         pose_values = self.loaded_poses[index]
