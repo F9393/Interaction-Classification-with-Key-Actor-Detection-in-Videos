@@ -1,4 +1,3 @@
-
 # Key Actor Detection
 
 This repository is the implementation of our action recognition model with special attention on key players involved in the action. Many activities in real life take place around many people, however only a few are actually involved in the action. We apply our attention based model to classify penalties in Ice-Hockey games, which is highly representative of the few-key, many-player scenario. 
@@ -75,4 +74,3 @@ The hyperparameters of the model are optimized using the Ax optimization tool wh
 	sbatch scripts/optimize_slurm.sh
 	```
 	Trials are evaluated sequentially with each trial executed on multiple GPUs. Presently, simultaneous evalutation of multiple trials on multiple GPUs is not supported.
-
