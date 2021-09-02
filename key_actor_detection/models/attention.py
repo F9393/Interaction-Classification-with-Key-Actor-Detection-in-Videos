@@ -114,7 +114,7 @@ class Attention3(nn.Module):
     attention for phase 4 model
     """  
 
-    def __init__(self, key_size, eventLSTM_h_dim, frameLSTM_h_dim):
+    def __init__(self, key_size, eventLSTM_h_dim, frameLSTM_h_dim, attention_params):
         """
         key_size = size of feature representation of player
         eventLSTM_h_dim = hidden dim of eventLSTM
@@ -124,10 +124,12 @@ class Attention3(nn.Module):
         super(Attention3, self).__init__()
         
         self.mlp = nn.Sequential(
-            nn.Linear(key_size + eventLSTM_h_dim + 2 * frameLSTM_h_dim, 64, bias=False),
+            nn.Linear(key_size + eventLSTM_h_dim + 2 * frameLSTM_h_dim, attention_params['hidden_size'], bias=attention_params['bias']),
             nn.ReLU(),
-            nn.Linear(64,1,bias=False)
+            nn.Linear(attention_params['hidden_size'], 1, bias=attention_params['bias'])
         )
+
+        self.pose_dim_increase = nn.Linear(key_size, 2* frameLSTM_h_dim)
         
     def forward(self, query, keys, frameLSTM_h, mask = None):
         """
@@ -141,13 +143,13 @@ class Attention3(nn.Module):
         # [B,1,H_e] -> [B,P,H_e]
         repeat_query = query.repeat(1,keys.size(1),1)
 
-        # [B,1,H_f] -> [B,P,H_f]
+        # [B,1,2*H_f] -> [B,P,2*H_f]
         repeat_frameLSTM_h = frameLSTM_h.repeat(1,keys.size(1),1)
 
-        # cat([B,P,K],[B,P,H_e], [B,P,H_f]) -> [B,P,K+H_e+H_f]
+        # cat([B,P,K],[B,P,H_e], [B,P,2*H_f]) -> [B,P,K+H_e+2*H_f]
         concatenated = torch.cat([keys,repeat_query, repeat_frameLSTM_h],2)
 
-        # [B,P,K+H_e+H_f] -> [B,P]
+        # [B,P,K+H_e+2*H_f] -> [B,P]
         raw_scores = self.mlp(concatenated).squeeze(2)
 
         # Mask invalid positions.
@@ -164,19 +166,19 @@ class Attention3(nn.Module):
         # c = torch.sum(raw_scores,1,keepdim=True) + 1.2e-38
         # weights = raw_scores / c
 
-
         # The context vector is the weighted sum of the values.
         # [B,P] -> [B,1,P]
         # [B,1,P] * [B,P,K] -> [B,1,K]
         context = torch.bmm(weights.unsqueeze(1), keys)
 
-        # uncomment below return stmt. when we want to input only weighted pose vector to the eventLSTM.(another change has to be made in models.py for this to work)
-        # return context,weights
+        # increase pose dimensions
+        # [B,1,K] -> [B,1,2*H_f]
+        inc_pose = self.pose_dim_increase(context)
 
-        # cat([B,1,K],[B,1,2*H_f]) -> [B,1,K+2*H_f]
-        embeddings = torch.cat([context, frameLSTM_h], 2)
+        # cat([B,1,2*H_f],[B,1,2*H_f]) -> [B,1,4*H_f]
+        embeddings = torch.cat([inc_pose, frameLSTM_h], 2)
         
-        # embeddings shape: [B,1,K+2*H_f], weights shape: [B,P]
+        # embeddings shape: [B,1,4*H_f], weights shape: [B,P]
         return embeddings, weights
 
 if __name__ == "__main__":
@@ -198,6 +200,6 @@ if __name__ == "__main__":
     query = torch.randn((8,1,256))
     keys = torch.randn((8,5,30))
     frameLSTM_h = torch.randn((8,1,512))
-    attn = Attention3(30,256,256)
+    attn = Attention3(30,256,256,{"hidden_size":256, "bias":True})
     out = attn(query,keys,frameLSTM_h)
     print(out[0].shape, out[1].shape)

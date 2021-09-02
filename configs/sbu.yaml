@@ -1,0 +1,77 @@
+dataset_path: "./datasets/sbu"
+
+num_nodes: 1 # number of nodes
+gpus: [0] # list of gpu indices on each node
+
+caching:
+  cache_folds:  true # videos in folds will be transformed with given resize and pickled. Make sure to delete the cache if you want to use new transforms. 
+  use_cache: true # use previously cached folds.
+  folds_cache_path: "./datasets/sbu/folds_cache"
+  
+training:    
+  train_dataloader:
+    batch_size: 16
+    num_workers: 4
+    shuffle: true
+  val_dataloader:
+    batch_size: 16
+    num_workers: 4
+    shuffle: false
+  select_frame: 10   
+  num_epochs: 5
+  learning_rate: 0.002
+  save_dir: "./mlruns" #null for no saving
+  folds: [1] # choose from 1,2,3,4,5
+  num_runs: 1 # each fold will be run these many times
+  model: "model4"
+
+deterministic:
+  set: true
+  seed: 50
+
+model1: 
+  resize: 224       
+  CNN_embed_dim: 256
+  num_classes: 8 
+  frameLSTM:
+    hidden_size: 256
+    winit: "default"
+    forget_gate_bias: "default"
+  eventLSTM:  
+    hidden_size: 256 
+    winit: "default"
+    forget_gate_bias: "default"
+  
+model2:
+  pose_coord: 2 # 2=>(x,y), 3=>(x,y,z)
+  num_classes: 8 
+  eventLSTM:  
+    hidden_size: 256 
+    winit: "default"
+    forget_gate_bias: "default"
+
+model3:
+  pose_coord: 3 # 2=>(x,y), 3=>(x,y,z)
+  num_classes: 8 
+  eventLSTM:  
+    hidden_size: 128 
+    winit: "default"
+    forget_gate_bias: "default"
+  attention_type: 2
+
+model4:
+  resize: 224       
+  CNN_embed_dim: 256
+  num_classes: 8 
+  pose_coord: 2 # 2=>(x,y), 3=>(x,y,z)
+  frameLSTM:
+    hidden_size: 256
+    winit: "default"
+    forget_gate_bias: "default"
+  eventLSTM:  
+    hidden_size: 256
+    winit: "default"
+    forget_gate_bias: "default"
+  attention_params:
+    hidden_size: 256
+    bias: true
