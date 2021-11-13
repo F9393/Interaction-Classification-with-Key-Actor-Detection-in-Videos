@@ -55,7 +55,7 @@ class BaseSBUDataset(data.Dataset):
         self.fold_no = fold_no
         self.resize = resize
 
-        if stage == "train" or stage == "val":
+        if stage == "train":
             self.transform = transforms.Compose(
                 [
                     transforms.Resize([resize, resize]),
@@ -65,6 +65,16 @@ class BaseSBUDataset(data.Dataset):
                     ),
                 ]
             )
+        elif stage == "val":
+            self.transform = transforms.Compose(
+                [
+                    transforms.Resize([resize, resize]),
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                    ),
+                ]
+            )            
 
         self.folders, self.labels, self.video_len = list(
             zip(*self._get_video_metdata(set_paths))
