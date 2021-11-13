@@ -68,7 +68,7 @@ class Model1(nn.Module):
 
 
 class Model2(nn.Module):
-    def __init__(self, eventLSTM, pose_coord, num_classes, **kwargs):
+    def __init__(self, eventLSTM, num_keypoints, coords_per_keypoint, num_classes, **kwargs):
         """
         Parameters
         ----------
@@ -76,8 +76,8 @@ class Model2(nn.Module):
             dictionary containing parameters of event-level LSTM. 
             Must contain 'hidden_size' key representing size of hidden_dim of LSTM. 
             'winit' and 'forget_gate_bias' keys are optional.
-        pose_coord  : int
-            no. of coordinates to consider for pose (either 2 for x,y or 3 for x,y,z)
+        pose_dim  : int
+            dimension of person pose 
         num_classes : int
             number of output classes of model
         
@@ -85,10 +85,7 @@ class Model2(nn.Module):
 
         super(Model2, self).__init__()
 
-        if pose_coord == 2:
-            pose_dim = 30
-        elif pose_coord == 3:
-            pose_dim = 45
+        pose_dim = num_keypoints * coords_per_keypoint
 
         self.eventLSTM = EventLSTM(input_size=pose_dim, **eventLSTM)
         self.fc = nn.Linear(
@@ -101,7 +98,6 @@ class Model2(nn.Module):
         out : shape (B,O)
         
         """
-
         e_out, (e_h_n, e_h_c) = self.eventLSTM(x)
 
         B, T, H = e_out.shape
@@ -115,7 +111,7 @@ class Model2(nn.Module):
 
 
 class Model3(nn.Module):
-    def __init__(self, eventLSTM, pose_coord, num_classes, attention_type, **kwargs):
+    def __init__(self, eventLSTM, pose_dim, num_classes, attention_type, **kwargs):
         """
         Parameters
         ----------
@@ -123,8 +119,8 @@ class Model3(nn.Module):
             dictionary containing parameters of event-level LSTM. 
             Must contain 'hidden_size' key representing size of hidden_dim of LSTM. 
             'winit' and 'forget_gate_bias' keys are optional.
-        pose_coord  : int
-            no. of coordinates to consider for pose (either 2 for x,y or 3 for x,y,z)
+        pose_dim  : int
+            dimension of person pose 
         num_classes : int
             number of output classes of model
         attention_type: 1 or 2
@@ -132,11 +128,6 @@ class Model3(nn.Module):
         """
 
         super(Model3, self).__init__()
-
-        if pose_coord == 2:
-            pose_dim = 30
-        elif pose_coord == 3:
-            pose_dim = 45
 
         self.hidden_size = eventLSTM["hidden_size"]
         if attention_type == 1:
@@ -151,9 +142,10 @@ class Model3(nn.Module):
             in_features=eventLSTM["hidden_size"], out_features=num_classes
         )
 
-    def forward(self, x):
+    def forward(self, x, mask=None):
         """
-        x : shape (B,T,P,I) (batch_size, #frames, #person, person feature size)
+        x : shape (B,T,P,I) (batch_size, #frames, #person, #person pose coordinates)
+        mask: shape (B,T,P,I)
         out : shape (B,O)
         
         """
@@ -164,7 +156,7 @@ class Model3(nn.Module):
         cell = torch.zeros(1, x.size(0), self.hidden_size).to(device)
 
         for t in range(x.size(1)):
-            embeddings, _ = self.attention(out, x[:, t, :, :])
+            embeddings, _ = self.attention(out, x[:, t, :, :], mask[:,t,:,0]) # in the mask, all keypoints of a valid player will be set to 0. So, one flag for a player is enough instead of one flag for every keypoint of the player.
             out, (hidden, cell) = self.eventLSTM(embeddings, (hidden, cell))
 
         # [B,1,H] -> [B,1,O]

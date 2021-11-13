@@ -179,7 +179,8 @@ class SBUDataModule(pl.LightningDataModule):
             )
         elif self.CFG.training.model == "model2":
             self.train_dataset = M2_SBU_Dataset(
-                self.CFG["model2"].pose_coord,
+                self.CFG["model2"].num_keypoints,
+                self.CFG["model2"].coords_per_keypoint,
                 reqd_train_set_paths,
                 self.select_frames,
                 "train",
@@ -189,7 +190,8 @@ class SBUDataModule(pl.LightningDataModule):
                 **self.CFG.caching
             )
             self.val_dataset = M2_SBU_Dataset(
-                self.CFG["model2"].pose_coord,
+                self.CFG["model2"].num_keypoints,
+                self.CFG["model2"].coords_per_keypoint,
                 reqd_val_set_paths,
                 self.select_frames,
                 "val",
@@ -200,7 +202,8 @@ class SBUDataModule(pl.LightningDataModule):
             )
         elif self.CFG.training.model == "model3":
             self.train_dataset = M3_SBU_Dataset(
-                self.CFG["model3"].pose_coord,
+                self.CFG["model3"].num_keypoints,
+                self.CFG["model3"].coords_per_keypoint,
                 reqd_train_set_paths,
                 self.select_frames,
                 "train",
@@ -210,7 +213,8 @@ class SBUDataModule(pl.LightningDataModule):
                 **self.CFG.caching
             )
             self.val_dataset = M3_SBU_Dataset(
-                self.CFG["model3"].pose_coord,
+                self.CFG["model3"].num_keypoints,
+                self.CFG["model3"].coords_per_keypoint,
                 reqd_val_set_paths,
                 self.select_frames,
                 "val",
@@ -221,7 +225,8 @@ class SBUDataModule(pl.LightningDataModule):
             )
         elif self.CFG.training.model == "model4":
             self.train_dataset = M4_SBU_Dataset(
-                self.CFG["model4"].pose_coord,
+                self.CFG["model4"].num_keypoints,
+                self.CFG["model4"].coords_per_keypoint,
                 reqd_train_set_paths,
                 self.select_frames,
                 "train",
@@ -231,7 +236,8 @@ class SBUDataModule(pl.LightningDataModule):
                 **self.CFG.caching
             )
             self.val_dataset = M4_SBU_Dataset(
-                self.CFG["model4"].pose_coord,
+                self.CFG["model4"].num_keypoints,
+                self.CFG["model4"].coords_per_keypoint,
                 reqd_val_set_paths,
                 self.select_frames,
                 "val",

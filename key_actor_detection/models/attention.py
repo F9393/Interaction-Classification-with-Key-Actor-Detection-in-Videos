@@ -94,7 +94,7 @@ class Attention2(nn.Module):
 
         # Mask invalid positions.
         if mask is not None:
-            raw_weights.data.masked_fill_(mask == 0, -float('inf'))
+            raw_weights.data.masked_fill_(mask == 1, -float('inf'))
         
         # Turn scores to probabilities.
         # [B,P] -> [B,P]

@@ -141,7 +141,7 @@ class FrameLoader(data.Dataset):
     def read_images(self, path):
         X = []
         for i in range(self.num_frames):
-            image = Image.open(os.path.join(path, 'frame{:04d}.png'.format(i)))
+            image = Image.open(os.path.join(path, 'frame_{:04d}.png'.format(i)))
             image = self.transform(image)
             X.append(image)
         X = torch.stack(X, dim=0)
@@ -157,6 +157,7 @@ class PoseLoader(data.Dataset):
         num_frames,
         max_players,
         num_keypoints,
+        coords_per_keypoint,
         **kwargs,
     ):
 
@@ -166,13 +167,14 @@ class PoseLoader(data.Dataset):
         self.num_frames = num_frames
         self.max_players = max_players
         self.num_keypoints = num_keypoints
+        self.coords_per_keypoint = coords_per_keypoint
         self.poses_and_masks = {}
 
-        # Always uses only x,y coordinates. Removes every third element from the poses (confidence is always 1).
+        # Uses only x,y coordinates. Removes every third element from the poses (confidence is always 1).
         for penalty_dir in self.X_dirs:
-            self.poses = np.zeros((self.num_frames, self.max_players, self.num_keypoints*2))
-            self.mask =  np.ones((self.num_frames, self.max_players, self.num_keypoints*2))
-            with open(os.path.join(penalty_dir, 'skeleton.txt'), "r") as f:
+            self.poses = np.zeros((self.num_frames, self.max_players, self.num_keypoints*self.coords_per_keypoint))
+            self.mask =  np.ones((self.num_frames, self.max_players, self.num_keypoints*self.coords_per_keypoint))
+            with open(os.path.join(penalty_dir, 'skeleton.json'), "r") as f:
                 tmp_poses = json.loads(f.read(), object_pairs_hook=OrderedDict)
                 for frame_no in range(self.num_frames):
                     frame_poses = tmp_poses[frame_no]
@@ -189,7 +191,7 @@ class M1_HockeyDataset(FrameLoader):
     """
 
     def __len__(self):
-        return len(self.X)
+        return len(self.y)
 
     def __getitem__(self, index):
         penalty_dir = self.X_dirs[index]
@@ -205,34 +207,54 @@ class M2_HockeyDataset(PoseLoader):
     dataloader for model 2
     """
 
+    def __len__(self):
+        return len(self.y)
+
     def __getitem__(self, index):
         penalty_dir = self.X_dirs[index]
         padded_poses = self.poses_and_masks[penalty_dir][0]
         mask = self.poses_and_masks[penalty_dir][1]
         masked_poses = np.ma.array(padded_poses, mask=mask)
         averaged_poses = np.mean(masked_poses, 1)
-        return averaged_poses, self.y[penalty_dir]
+        return np.ma.getdata(averaged_poses).astype('float32'), self.y[index]
 
-class M3_HockeyDataset(FrameLoader, PoseLoader):
+class M3_HockeyDataset(PoseLoader):
     """
     dataloader for model 3
     """
 
-    def __getitem__(self, index):
-        pose_values = self.loaded_poses[index]
-        pose_values = pose_values.view(
-            pose_values.shape[0], 2, self.keypoints_per_person
-        )
-        y = torch.LongTensor([self.labels[index]])
+    def __len__(self):
+        return len(self.y)
 
-        # pose_values : (#frames, #players, #keypoints_per_player)
-        return pose_values, y
+    def __getitem__(self, index):
+        penalty_dir = self.X_dirs[index]
+        padded_poses = self.poses_and_masks[penalty_dir][0]
+        mask = self.poses_and_masks[penalty_dir][1]
+
+        # padded_poses, mask : (#frames, max_players, #keypoints_per_player)
+        return padded_poses, mask, self.y[index]
 
 
 class M4_HockeyDataset(M2_HockeyDataset):
     """
     dataloader for model 4.
     """
+    def __init__(
+        self,
+        data,
+        resize,
+        stage,
+        num_frames,
+        max_players,
+        num_keypoints,
+        **kwargs,
+    ):
+
+        FrameLoader.__init__(data, resize, stage, num_frames)
+        PoseLoader.__init__(data,stage,num_frames,max_players, num_keypoints)
+
+    def __len__(self):
+        return len(self.y)
 
     def __getitem__(self, index):
         # load frames : shape (10,3,224,224)

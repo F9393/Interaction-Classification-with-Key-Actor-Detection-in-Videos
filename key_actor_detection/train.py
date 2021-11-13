@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import torchmetrics
 
 from .datamodules.sbu_datamodule import SBUDataModule
+from .datamodules.hockey_datamodule import HockeyDataModule
 
 import pytorch_lightning as pl
 from pytorch_lightning import Trainer, seed_everything
@@ -70,7 +71,13 @@ class KeyActorDetection(pl.LightningModule):
         
 
 def train(CFG):
-    dm = SBUDataModule(CFG)
+    if CFG.dataset_name == "SBU":
+        dm = SBUDataModule(CFG)
+    elif CFG.dataset_name == "Hockey":
+        dm = HockeyDataModule(CFG)
+    else:
+        raise ValueError("Invalid Dataset! Must be one of of 'SBU' or 'Hockey'")
+
     dm.prepare_data()
 
     for fold_no in CFG.training.folds:
@@ -101,7 +108,7 @@ def train(CFG):
                 weights_summary='top',
                 log_every_n_steps=4,
                 deterministic=CFG.deterministic.set,
-                accelerator = "ddp" if len(CFG.gpus)>1 else None,
+                accelerator = "ddp" if CFG.gpus is not None and len(CFG.gpus)>1 else None,
             )
 
             trainer.fit(model,dm)

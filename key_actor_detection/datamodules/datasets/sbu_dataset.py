@@ -224,20 +224,20 @@ class M2_SBU_Dataset(BaseSBUDataset):
     dataloader for model 2
     """
 
-    def __init__(self, dim, *args, **kwargs):
+    def __init__(self, num_keypoints, coords_per_keypoint, *args, **kwargs):
         super(M2_SBU_Dataset, self).__init__(*args, **kwargs)
         self.keypoints_per_person = None
         self.loaded_poses = None
 
-        if dim == 2:
+        if coords_per_keypoint == 2:
             idxs = torch.tensor([i for i in range(90) if (i + 1) % 3 != 0])
             self.loaded_poses = [x[:, idxs] for x in self.loaded_videos['poses']]
-            self.keypoints_per_person = 30
-        elif dim == 3:
+        elif coords_per_keypoint == 3:
             self.loaded_poses = self.loaded_videos['poses']
-            self.keypoints_per_person = 45
         else:
             raise Exception("invalid dim in M2_SBU_Dataset! Must be either 2 or 3.")
+            
+        self.keypoints_per_person = num_keypoints * coords_per_keypoint
 
     def __getitem__(self, index):
         pose_values = self.loaded_poses[index]
