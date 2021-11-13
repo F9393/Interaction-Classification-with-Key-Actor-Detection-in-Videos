@@ -111,7 +111,7 @@ class Model2(nn.Module):
 
 
 class Model3(nn.Module):
-    def __init__(self, eventLSTM, pose_dim, num_classes, attention_type, **kwargs):
+    def __init__(self, eventLSTM, num_keypoints, coords_per_keypoint, num_classes, attention_type, **kwargs):
         """
         Parameters
         ----------
@@ -128,6 +128,8 @@ class Model3(nn.Module):
         """
 
         super(Model3, self).__init__()
+
+        pose_dim = num_keypoints * coords_per_keypoint
 
         self.hidden_size = eventLSTM["hidden_size"]
         if attention_type == 1:
@@ -149,7 +151,6 @@ class Model3(nn.Module):
         out : shape (B,O)
         
         """
-
         device = x.device
         out = torch.zeros(x.size(0), 1, self.hidden_size).to(device)
         hidden = torch.zeros(1, x.size(0), self.hidden_size).to(device)

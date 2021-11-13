@@ -42,7 +42,7 @@ class Attention1(nn.Module):
 
         # Mask invalid positions.
         if mask is not None:
-            raw_scores.data.masked_fill_(mask == 0, -float('inf'))
+            raw_scores.data.masked_fill_(mask == 1, -float('inf'))
         
         # Turn scores to probabilities.
         # [B,P] -> [B,P]
@@ -95,7 +95,7 @@ class Attention2(nn.Module):
         # Mask invalid positions.
         if mask is not None:
             raw_weights.data.masked_fill_(mask == 1, -float('inf'))
-        
+
         # Turn scores to probabilities.
         # [B,P] -> [B,P]
         weights = F.softmax(raw_weights, dim=1)   

@@ -172,8 +172,8 @@ class PoseLoader(data.Dataset):
 
         # Uses only x,y coordinates. Removes every third element from the poses (confidence is always 1).
         for penalty_dir in self.X_dirs:
-            self.poses = np.zeros((self.num_frames, self.max_players, self.num_keypoints*self.coords_per_keypoint))
-            self.mask =  np.ones((self.num_frames, self.max_players, self.num_keypoints*self.coords_per_keypoint))
+            self.poses = np.zeros((self.num_frames, self.max_players, self.num_keypoints*self.coords_per_keypoint), dtype='float32')
+            self.mask =  np.ones((self.num_frames, self.max_players, self.num_keypoints*self.coords_per_keypoint), dtype='float32')
             with open(os.path.join(penalty_dir, 'skeleton.json'), "r") as f:
                 tmp_poses = json.loads(f.read(), object_pairs_hook=OrderedDict)
                 for frame_no in range(self.num_frames):
