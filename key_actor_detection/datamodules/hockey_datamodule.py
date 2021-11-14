@@ -12,9 +12,7 @@ import glob
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 
-
 from .datasets.hockey_dataset import M1_HockeyDataset, M2_HockeyDataset, M3_HockeyDataset, M4_HockeyDataset
-
 
 class HockeyDataModule(pl.LightningDataModule):
     def __init__(self, CFG):

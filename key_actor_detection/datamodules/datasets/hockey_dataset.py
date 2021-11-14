@@ -101,18 +101,15 @@ import numpy as np
 #     def __getitem__(self, index):
 #         raise NotImplementedError()
 
-class FrameLoader(data.Dataset):
+class FrameReader():
     def __init__(
         self,
-        data,
         resize,
         stage,
         num_frames,
         **kwargs,
     ):
 
-        self.X_dirs = data[0]
-        self.y = data[1]
         self.resize = resize
         self.stage = stage
         self.num_frames = num_frames
@@ -147,9 +144,79 @@ class FrameLoader(data.Dataset):
         X = torch.stack(X, dim=0)
         return X
 
+class PoseReader():
+    def __init__(
+        self,
+        X_dirs,
+        stage,
+        num_frames,
+        max_players,
+        num_keypoints,
+        coords_per_keypoint,
+        **kwargs,
+    ):
+
+        self.X_dirs = X_dirs
+        self.stage = stage
+        self.num_frames = num_frames
+        self.max_players = max_players
+        self.num_keypoints = num_keypoints
+        self.coords_per_keypoint = coords_per_keypoint
+        self.poses_and_masks = self.generate_pose_and_masks()
+
+    def generate_pose_and_masks(self):
+        # Uses only x,y coordinates. Removes every third element from the poses (confidence is always 1).
+        poses_and_masks = {}
+        for penalty_dir in self.X_dirs:
+            self.poses = np.zeros((self.num_frames, self.max_players, self.num_keypoints*self.coords_per_keypoint), dtype='float32')
+            self.mask =  np.ones((self.num_frames, self.max_players, self.num_keypoints*self.coords_per_keypoint), dtype='float32')
+            with open(os.path.join(penalty_dir, 'skeleton.json'), "r") as f:
+                tmp_poses = json.loads(f.read(), object_pairs_hook=OrderedDict)
+                for frame_no in range(self.num_frames):
+                    frame_poses = tmp_poses[frame_no]
+                    for player_no,player_pose in frame_poses.items():
+                        if player_no.startswith("p"):
+                            del player_pose[2::3]     
+                            self.poses[frame_no, int(player_no[1:]), :] = player_pose
+                            self.mask[frame_no, int(player_no[1:]), :] = 0 # if mask=0, means do not mask these values
+                poses_and_masks[penalty_dir] = (self.poses, self.mask)    
+        return poses_and_masks        
+
+class M1_HockeyDataset(data.Dataset):
+    """
+    dataloader for model 1.
+    """
+
+    def __init__(
+        self,
+        data,
+        resize,
+        stage,
+        num_frames,
+        **kwargs,
+    ):
+
+        self.X_dirs = data[0]
+        self.y = data[1]
+        self.frame_reader = FrameReader(resize, stage, num_frames, **kwargs)
+
+    def __len__(self):
+        return len(self.y)
+
+    def __getitem__(self, index):
+        penalty_dir = self.X_dirs[index]
+
+        # Load data
+        X = self.frame_reader.read_images(penalty_dir)     # (input) spatial images
+        y = torch.LongTensor([self.y[index]])                  # (labels) LongTensor are for int64 instead of FloatTensor
+        return X, y
 
 
-class PoseLoader(data.Dataset):
+class M2_HockeyDataset(data.Dataset):
+    """
+    dataloader for model 2
+    """
+
     def __init__(
         self,
         data,
@@ -163,79 +230,51 @@ class PoseLoader(data.Dataset):
 
         self.X_dirs = data[0]
         self.y = data[1]
-        self.stage = stage
-        self.num_frames = num_frames
-        self.max_players = max_players
-        self.num_keypoints = num_keypoints
-        self.coords_per_keypoint = coords_per_keypoint
-        self.poses_and_masks = {}
-
-        # Uses only x,y coordinates. Removes every third element from the poses (confidence is always 1).
-        for penalty_dir in self.X_dirs:
-            self.poses = np.zeros((self.num_frames, self.max_players, self.num_keypoints*self.coords_per_keypoint), dtype='float32')
-            self.mask =  np.ones((self.num_frames, self.max_players, self.num_keypoints*self.coords_per_keypoint), dtype='float32')
-            with open(os.path.join(penalty_dir, 'skeleton.json'), "r") as f:
-                tmp_poses = json.loads(f.read(), object_pairs_hook=OrderedDict)
-                for frame_no in range(self.num_frames):
-                    frame_poses = tmp_poses[frame_no]
-                    for player_no,player_pose in frame_poses.items():
-                        if player_no.startswith("p"):
-                            del player_pose[2::3]     
-                            self.poses[frame_no, int(player_no[1:]), :] = player_pose
-                            self.mask[frame_no, int(player_no[1:]), :] = 0 # if mask=0, means do not mask these values
-                self.poses_and_masks[penalty_dir] = (self.poses, self.mask)            
-
-class M1_HockeyDataset(FrameLoader):
-    """
-    dataloader for model 1.
-    """
+        self.pose_reader = PoseReader(self.X_dirs, stage, num_frames, max_players, num_keypoints, coords_per_keypoint, **kwargs)
 
     def __len__(self):
         return len(self.y)
 
     def __getitem__(self, index):
         penalty_dir = self.X_dirs[index]
-
-        # Load data
-        X = self.read_images(penalty_dir)     # (input) spatial images
-        y = torch.LongTensor([self.y[index]])                  # (labels) LongTensor are for int64 instead of FloatTensor
-        return X, y
-
-
-class M2_HockeyDataset(PoseLoader):
-    """
-    dataloader for model 2
-    """
-
-    def __len__(self):
-        return len(self.y)
-
-    def __getitem__(self, index):
-        penalty_dir = self.X_dirs[index]
-        padded_poses = self.poses_and_masks[penalty_dir][0]
-        mask = self.poses_and_masks[penalty_dir][1]
+        padded_poses = self.pose_reader.poses_and_masks[penalty_dir][0]
+        mask = self.pose_reader.poses_and_masks[penalty_dir][1]
         masked_poses = np.ma.array(padded_poses, mask=mask)
         averaged_poses = np.mean(masked_poses, 1)
         return np.ma.getdata(averaged_poses).astype('float32'), self.y[index]
 
-class M3_HockeyDataset(PoseLoader):
+class M3_HockeyDataset(data.Dataset):
     """
     dataloader for model 3
     """
+    def __init__(
+        self,
+        data,
+        stage,
+        num_frames,
+        max_players,
+        num_keypoints,
+        coords_per_keypoint,
+        **kwargs,
+    ):
+
+        self.X_dirs = data[0]
+        self.y = data[1]
+        self.pose_reader = PoseReader(self.X_dirs, stage, num_frames, max_players, num_keypoints, coords_per_keypoint, **kwargs)
 
     def __len__(self):
         return len(self.y)
 
     def __getitem__(self, index):
         penalty_dir = self.X_dirs[index]
-        padded_poses = self.poses_and_masks[penalty_dir][0]
-        mask = self.poses_and_masks[penalty_dir][1]
+        padded_poses = self.pose_reader.poses_and_masks[penalty_dir][0]
+        mask = self.pose_reader.poses_and_masks[penalty_dir][1]
 
         # padded_poses, mask : (#frames, max_players, #keypoints_per_player)
         return padded_poses, mask, self.y[index]
 
 
-class M4_HockeyDataset(M2_HockeyDataset):
+class M4_HockeyDataset(FrameReader, PoseReader):
     """
     dataloader for model 4.
     """
@@ -250,8 +289,8 @@ class M4_HockeyDataset(M2_HockeyDataset):
         **kwargs,
     ):
 
-        FrameLoader.__init__(data, resize, stage, num_frames)
-        PoseLoader.__init__(data,stage,num_frames,max_players, num_keypoints)
+        FrameReader.__init__(data, resize, stage, num_frames)
+        PoseReader.__init__(data,stage,num_frames,max_players, num_keypoints)
 
     def __len__(self):
         return len(self.y)
