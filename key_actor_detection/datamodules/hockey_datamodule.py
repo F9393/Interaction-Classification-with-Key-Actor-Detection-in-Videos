@@ -90,13 +90,19 @@ class HockeyDataModule(pl.LightningDataModule):
                 (X_train_dirs, y_train),
                 self.resize,
                 "train",
-                self.CFG.training.num_frames,
+                self.CFG["model4"].num_frames,
+                self.CFG["model4"].max_players,
+                self.CFG["model4"].num_keypoints,
+                self.CFG["model4"].coords_per_keypoint,
             )
             self.val_dataset = M4_HockeyDataset(
                 (X_test_dirs, y_test),
                 self.resize,
                 "val",
-                self.CFG.training.num_frames,
+                self.CFG["model4"].num_frames,
+                self.CFG["model4"].max_players,
+                self.CFG["model4"].num_keypoints,
+                self.CFG["model4"].coords_per_keypoint,
             )
         else:
             raise ValueError(f"invalid model name : {self.CFG.training.model}")

@@ -157,7 +157,11 @@ class Model3(nn.Module):
         cell = torch.zeros(1, x.size(0), self.hidden_size).to(device)
 
         for t in range(x.size(1)):
-            embeddings, _ = self.attention(out, x[:, t, :, :], mask[:,t,:,0]) # in the mask, all keypoints of a valid player will be set to 0. So, one flag for a player is enough instead of one flag for every keypoint of the player.
+            if mask is not None:
+                curr_frame_mask = mask[:,t,:,0]
+            else:
+                curr_frame_mask = None
+            embeddings, _ = self.attention(out, x[:, t, :, :], curr_frame_mask) # in the mask, all keypoints of a valid player will be set to 0. So, one flag for a player is enough instead of one flag for every keypoint of the player.
             out, (hidden, cell) = self.eventLSTM(embeddings, (hidden, cell))
 
         # [B,1,H] -> [B,1,O]
@@ -175,7 +179,8 @@ class Model4(nn.Module):
         frameLSTM,
         CNN_embed_dim,
         eventLSTM,
-        pose_coord,
+        num_keypoints,
+        coords_per_keypoint,
         num_classes,
         attention_params,
         **kwargs,
@@ -209,10 +214,7 @@ class Model4(nn.Module):
 
         super(Model4, self).__init__()
 
-        if pose_coord == 2:
-            pose_dim = 30
-        elif pose_coord == 3:
-            pose_dim = 45
+        pose_dim = num_keypoints * coords_per_keypoint
 
         self.encoder = Encoder(CNN_embed_dim=CNN_embed_dim)
         self.frameLSTM = FrameLSTM(input_size=CNN_embed_dim, **frameLSTM)
@@ -230,10 +232,11 @@ class Model4(nn.Module):
 
         self.eventLSTM_h_dim = eventLSTM["hidden_size"]
 
-    def forward(self, frames, poses):
+    def forward(self, frames, poses, mask=None):
         """
         frames : shape (B,T,C,H,W) [batch_size,#frames,channels,height,width]
         poses : (B,T,P,I)) [batch_size, #frames, #person, person feature size]
+        mask: shape (B,T,P,I)
         out : shape (B,O)
         
         """
@@ -251,8 +254,12 @@ class Model4(nn.Module):
         e_cell = torch.zeros(1, frames.size(0), self.eventLSTM_h_dim).to(device)
 
         for t in range(frames.size(1)):
+            if mask is not None:
+                curr_frame_mask = mask[:,t,:,0]
+            else:
+                curr_frame_mask = None
             embeddings, _ = self.attention(
-                e_out, poses[:, t, :, :], f_out[:, t, :].unsqueeze(1)
+                e_out, poses[:, t, :, :], f_out[:, t, :].unsqueeze(1), curr_frame_mask
             )
             e_out, (e_hidden, e_cell) = self.eventLSTM(embeddings, (e_hidden, e_cell))
 
