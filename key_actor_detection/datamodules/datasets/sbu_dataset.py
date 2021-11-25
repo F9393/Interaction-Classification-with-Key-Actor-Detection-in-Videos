@@ -7,10 +7,47 @@ from tqdm import tqdm
 import glob
 import pickle
 
-class BaseSBUDataset(data.Dataset):
+def get_video_metdata(set_paths):
+    """
+    Gets meta data from the dataset.
+
+    Parameters
+    ----------
+    set_paths : list
+        paths to the participant sets (e.g '../../s01s02')
+
+    Returns
+    -------
+    output : list [(video_path, class label, number of frames in the video)]
+        video_path : e.g '../../s01s02/01/001'
+        class_label : integer from [0,7]
+        number of frames : number of frames in this video
+
+        video_paths are found by walking through set_paths
+
+    """
+
+    all_data = []
+
+    for part_path in set_paths:
+        cats = sorted([s.decode("utf-8") if type(s) == bytes else s for s in os.listdir(part_path)])[1:]
+        for cat in cats:
+            label = int(cat) - 1
+            cat_path = os.path.join(part_path, cat)  # path to category(1-8)
+            runs = sorted(os.listdir(cat_path))
+            if runs[0] == ".DS_Store":
+                runs = runs[1::]
+            for run in runs:
+                run_path = os.path.join(cat_path, run)
+                num_frames = len(glob.glob(f"{run_path}/rgb*"))
+                all_data.append((run_path, label, num_frames))
+    return all_data
+
+class FrameReader():
     def __init__(
         self,
-        set_paths,
+        folders,
+        labels,
         select_frames,
         stage,
         resize,
@@ -21,31 +58,6 @@ class BaseSBUDataset(data.Dataset):
         folds_cache_path,
         **kwargs,
     ):
-        """
-        Dataset class containing utility functions to read the image and pose data in SBU Kinect dataset.
-        As the size of SBU Kinect dataset is small, all images and pose values are 
-        read and stored beforeheand to save data loading time. Optionally, this loaded data
-        can also be written to a pickle file to save reading time for future runs.
-        This class does NOT implement __getitem__. New classes must be written that inherit from
-        this class, using the data saved in "self.loaded_videos" inside __getitem__.
-
-        Parameters
-        ----------
-        set_paths : list
-            paths to the participant sets (e.g '../../s01s02')
-        select_frames : int
-            these number of frames will be selected from the middle of each video
-        stage : string
-            one of "train" or "test"
-        resize: int
-            all frames will be resized to (resize,resize)
-        fold_no: int
-            if using K-fold CV, fold_no is incorporated in name of saved pickle file 
-        data_dir: string
-            dataset path
-
-        """
-
         # set_paths = [set_paths[0]]
 
         self.data_dir = data_dir
@@ -76,9 +88,8 @@ class BaseSBUDataset(data.Dataset):
                 ]
             )            
 
-        self.folders, self.labels, self.video_len = list(
-            zip(*self._get_video_metdata(set_paths))
-        )
+        self.folders = folders
+        self.labels = labels
 
         loaded_dataset_path = os.path.join(
             folds_cache_path, f"sbu_{stage}_fold={fold_no}.pkl"
@@ -100,41 +111,6 @@ class BaseSBUDataset(data.Dataset):
                     print(f"Writing {stage} fold {fold_no} to cache.")
                     pickle.dump(self.loaded_videos, f)
 
-    def _get_video_metdata(self, set_paths):
-        """
-        Gets meta data from the dataset.
-
-        Parameters
-        ----------
-        set_paths : list
-            paths to the participant sets (e.g '../../s01s02')
-
-        Returns
-        -------
-        output : list [(video_path, class label, number of frames in the video)]
-            video_path : e.g '../../s01s02/01/001'
-            class_label : integer from [0,7]
-            number of frames : number of frames in this video
-
-            video_paths are found by walking through set_paths
-
-        """
-
-        all_data = []
-
-        for part_path in set_paths:
-            cats = sorted([s.decode("utf-8") if type(s) == bytes else s for s in os.listdir(part_path)])[1:]
-            for cat in cats:
-                label = int(cat) - 1
-                cat_path = os.path.join(part_path, cat)  # path to category(1-8)
-                runs = sorted(os.listdir(cat_path))
-                if runs[0] == ".DS_Store":
-                    runs = runs[1::]
-                for run in runs:
-                    run_path = os.path.join(cat_path, run)
-                    num_frames = len(glob.glob(f"{run_path}/rgb*"))
-                    all_data.append((run_path, label, num_frames))
-        return all_data
 
     def _load_videos(self):
         """
@@ -204,22 +180,205 @@ class BaseSBUDataset(data.Dataset):
     def __len__(self):
         return len(self.folders)
 
+class PoseReader():
+    def __init__(
+        self,
+        set_paths,
+        select_frames,
+        stage,
+        resize,
+        fold_no,
+        data_dir,
+        cache_folds,
+        use_cache,
+        folds_cache_path,
+        **kwargs,
+    ):
+        # set_paths = [set_paths[0]]
+
+        self.data_dir = data_dir
+        self.select_frames = select_frames
+        self.stage = stage
+        self.loaded_videos = None
+        self.fold_no = fold_no
+        self.resize = resize
+
+        if stage == "train":
+            self.transform = transforms.Compose(
+                [
+                    transforms.Resize([resize, resize]),
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                    ),
+                ]
+            )
+        elif stage == "val":
+            self.transform = transforms.Compose(
+                [
+                    transforms.Resize([resize, resize]),
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                    ),
+                ]
+            )            
+
+        self.folders, self.labels, self.video_len = list(
+            zip(*self._get_video_metdata(set_paths))
+        )
+
+        loaded_dataset_path = os.path.join(
+            folds_cache_path, f"sbu_{stage}_fold={fold_no}.pkl"
+        )
+        if os.path.exists(loaded_dataset_path) and use_cache:
+            print(f"Using cached {stage} data.")
+            with open(loaded_dataset_path, "rb") as f:
+                self.loaded_videos = pickle.load(f)
+        else:
+            if cache_folds and not os.path.exists(folds_cache_path):
+                raise Exception(
+                    f"Directory {folds_cache_path} not found! Create directory and re-run."
+                )
+
+            self.loaded_videos = self._load_videos()
+
+            if os.getenv("SLURM_LOCALID", '0') == '0' and cache_folds:
+                with open(loaded_dataset_path, "wb") as f:
+                    print(f"Writing {stage} fold {fold_no} to cache.")
+                    pickle.dump(self.loaded_videos, f)
+
+    def _load_videos(self):
+        """
+        Reads RGB images and pose data. Folders to read from are found from meta-data.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        output : list [(loaded_frames, video_pose_values)]
+            loaded_frames : 4D Tensor of shape (#frames, #channels, resize, resize)
+            video_pose_values : 2D Tensor of shape (#frames, 90) containing normalized x,y,z pose coordinates for each of 
+            15 keypoints for both participants in each frame. First 45 values correspond to participant 1 and next 45 to 
+            participant 2.
+
+        """
+
+        all_video_poses = torch.zeros(len(self.folders), self.select_frames, 90)
+        with tqdm(self.folders) as pbar:
+            pbar.set_description(f"Reading {self.stage} fold {self.fold_no} data!")
+
+            for index, video_pth in enumerate(pbar):
+                video_len = self.video_len[index]
+                start_idx = (video_len - self.select_frames) // 2
+                end_idx = start_idx + self.select_frames
+
+                frame_pths = sorted(glob.glob(f"{video_pth}/rgb*"))
+                reqd_frame_pths = frame_pths[start_idx:end_idx]
+                loaded_frames = torch.zeros(
+                    self.select_frames, 3, self.resize, self.resize, dtype=torch.float32
+                )
+                for idx, frame_pth in enumerate(reqd_frame_pths):
+                    frame = Image.open(frame_pth).convert("RGB")
+                    frame = (
+                        self.transform(frame) if self.transform is not None else frame
+                    )  # impose transformation if exists
+                    loaded_frames[idx] = frame
+
+                all_video_frames[index] = loaded_frames
+
+                # load pose data
+                with open(os.path.join(video_pth, "skeleton_pos.txt"), "r") as f:
+                    pose_data = f.readlines()
+
+                assert len(frame_pths) == len(pose_data), "pose data loaded incorrectly"
+
+                reqd_pose_data = pose_data[start_idx:end_idx]
+
+                video_pose_values = torch.zeros(self.select_frames, 90, dtype=torch.float32)
+                for frame_idx, row in enumerate(reqd_pose_data):
+                    posture_data = [x.strip() for x in row.split(",")]
+                    frame_pose_values = torch.tensor([float(x) for x in posture_data[1:]])
+                    assert (
+                        len(frame_pose_values) == 90
+                    ), "incorrect number of pose values"
+
+                    video_pose_values[frame_idx] = frame_pose_values
+
+                all_video_poses[index] = video_pose_values
+            
+        return {"frames":all_video_frames, "poses":all_video_poses}
+
+    def __len__(self):
+        return len(self.folders)
+
     def __getitem__(self, index):
         raise NotImplementedError()
 
-
-class M1_SBU_Dataset(BaseSBUDataset):
+class M1_SBU_Dataset(data.Dataset):
     """
     dataloader for model 1.
     """
-    
+    def __init__(
+        self,
+        set_paths,
+        select_frames,
+        stage,
+        resize,
+        fold_no,
+        data_dir,
+        cache_folds,
+        use_cache,
+        folds_cache_path,
+        **kwargs,
+    ):
+        # set_paths = [set_paths[0]]
+
+       self.folders, self.labels, self.video_len = list(
+            zip(*get_video_metdata(set_paths))
+        )
+
+        self.frame_reader = FrameReader()
+
+        self.data_dir = data_dir
+        self.select_frames = select_frames
+        self.stage = stage
+        self.loaded_videos = None
+        self.fold_no = fold_no
+        self.resize = resize
+
+        if stage == "train":
+            self.transform = transforms.Compose(
+                [
+                    transforms.Resize([resize, resize]),
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                    ),
+                ]
+            )
+        elif stage == "val":
+            self.transform = transforms.Compose(
+                [
+                    transforms.Resize([resize, resize]),
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                    ),
+                ]
+            )            
+
+ 
+
     def __getitem__(self, index):
         X = self.loaded_videos['frames'][index]
         y = torch.LongTensor([self.labels[index]])
         return X, y
 
 
-class M2_SBU_Dataset(BaseSBUDataset):
+class M2_SBU_Dataset(data.Dataset):
     """
     dataloader for model 2
     """
@@ -250,7 +409,7 @@ class M2_SBU_Dataset(BaseSBUDataset):
         return avg_pose, y
 
 
-class M3_SBU_Dataset(M2_SBU_Dataset):
+class M3_SBU_Dataset(data.Dataset):
     """
     dataloader for model 3
     """
@@ -266,7 +425,7 @@ class M3_SBU_Dataset(M2_SBU_Dataset):
         return pose_values, y
 
 
-class M4_SBU_Dataset(M2_SBU_Dataset):
+class M4_SBU_Dataset(data.Dataset):
     """
     dataloader for model 4.
     """
