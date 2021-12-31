@@ -71,23 +71,19 @@ class KeyActorDetection(pl.LightningModule):
         
 
 def train(CFG):
-    if CFG.dataset_name == "SBU":
-        dm = SBUDataModule(CFG)
-    elif CFG.dataset_name == "Hockey":
-        dm = HockeyDataModule(CFG)
-    else:
-        raise ValueError("Invalid Dataset! Must be one of of 'SBU' or 'Hockey'")
-
-    dm.prepare_data()
-
     for fold_no in CFG.training.folds:
+        # once PL version 1.6 releases, we can shift below 2 statements outside the for loop
+        dm = SBUDataModule(CFG)
+        dm.prepare_data()
+        dm.setup(fold_no = fold_no)
         results = []
+
         for run_no in range(1,CFG.training.num_runs+1):
             if CFG.deterministic.set:
                 seed_everything(CFG.deterministic.seed, workers=True)
 
             model = KeyActorDetection(CFG)
-            dm.setup(fold_no = fold_no)
+
             mlf_logger = pl_loggers.mlflow.MLFlowLogger(experiment_name=CFG.training.model, run_name = f'fold={fold_no},run={run_no}', save_dir=CFG.training.save_dir)
             checkpoint_callback = ModelCheckpoint(dirpath=None,
                                                 monitor='val_acc_epoch',
