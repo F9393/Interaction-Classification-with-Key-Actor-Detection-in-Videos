@@ -165,7 +165,6 @@ class SBUDataModule(pl.LightningDataModule):
                 "train",
                 self.resize,
                 fold_no,
-                self.data_dir,
                 **self.CFG.caching
             )
             self.val_dataset = M1_SBU_Dataset(
@@ -174,7 +173,6 @@ class SBUDataModule(pl.LightningDataModule):
                 "val",
                 self.resize,
                 fold_no,
-                self.data_dir,
                 **self.CFG.caching
             )
         elif self.CFG.training.model == "model2":
@@ -278,32 +276,32 @@ if __name__ == "__main__":
         print(f"frames = {batch[0].shape} , y = {batch[1].shape}")
         break
 
-    print("\nModel 2 Test")
-    CFG.training.model = "model2"
-    dm = SBUDataModule(CFG)
-    dm.prepare_data()
-    dm.setup(fold_no=1)
-    for batch in dm.train_dataloader():
-        print(f"pose = {batch[0].shape} , y = {batch[1].shape}")
-        break
+    # print("\nModel 2 Test")
+    # CFG.training.model = "model2"
+    # dm = SBUDataModule(CFG)
+    # dm.prepare_data()
+    # dm.setup(fold_no=1)
+    # for batch in dm.train_dataloader():
+    #     print(f"pose = {batch[0].shape} , y = {batch[1].shape}")
+    #     break
 
-    print("\nModel 3 Test")
-    CFG.training.model = "model3"
-    dm = SBUDataModule(CFG)
-    dm.prepare_data()
-    dm.setup(fold_no=1)
-    for batch in dm.train_dataloader():
-        print(f"pose = {batch[0].shape} , y = {batch[1].shape}")
-        break
+    # print("\nModel 3 Test")
+    # CFG.training.model = "model3"
+    # dm = SBUDataModule(CFG)
+    # dm.prepare_data()
+    # dm.setup(fold_no=1)
+    # for batch in dm.train_dataloader():
+    #     print(f"pose = {batch[0].shape} , y = {batch[1].shape}")
+    #     break
 
-    print("\nModel 4 Test")
-    CFG.training.model = "model4"
-    dm = SBUDataModule(CFG)
-    dm.prepare_data()
-    dm.setup(fold_no=1)
-    for batch in dm.train_dataloader():
-        print(
-            f"frames = {batch[0].shape} , pose = {batch[1].shape}, y = {batch[2].shape}"
-        )
-        break
+    # print("\nModel 4 Test")
+    # CFG.training.model = "model4"
+    # dm = SBUDataModule(CFG)
+    # dm.prepare_data()
+    # dm.setup(fold_no=1)
+    # for batch in dm.train_dataloader():
+    #     print(
+    #         f"frames = {batch[0].shape} , pose = {batch[1].shape}, y = {batch[2].shape}"
+    #     )
+    #     break
 

@@ -7,6 +7,37 @@ from tqdm import tqdm
 import glob
 import pickle
 
+class Cache():
+    def __init__(self, do_cache: bool, use_cache: bool):
+        # if both do_cache and use_cache are True, cache will be read and same cache will be written back again
+        self.do_cache = do_cache
+        self.use_cache = use_cache
+        self.read_from_cache = False
+
+    def read(self, cache_path, message = None):
+        if self.do_cache and not os.path.exists(os.path.dirname(cache_path)):
+            raise Exception(
+                f"Directory {os.path.dirname(cache_path)} not found! Create directory and re-run."
+            )
+        if not self.use_cache or not os.path.exists(cache_path):
+            return None
+        with open(cache_path, "rb") as f:
+            if message is not None:
+                print(message)
+            cache_item = pickle.load(f)
+            self.read_from_cache = True
+
+        return cache_item
+
+    def write(self, cache_item, cache_path, message = None):
+        if not self.do_cache or os.getenv("SLURM_LOCALID", '0') != '0' or self.read_from_cache: # write cache only on first gpu process
+            return None
+        else:
+            with open(cache_path, "wb") as f:
+                if message is not None:
+                    print(message)
+                pickle.dump(cache_item, f)  
+
 def get_video_metdata(set_paths):
     """
     Gets meta data from the dataset.
@@ -41,34 +72,14 @@ def get_video_metdata(set_paths):
                 run_path = os.path.join(cat_path, run)
                 num_frames = len(glob.glob(f"{run_path}/rgb*"))
                 all_data.append((run_path, label, num_frames))
-    return all_data
+    return all_data          
 
-class FrameReader():
-    def __init__(
-        self,
-        folders,
-        labels,
-        select_frames,
-        stage,
-        resize,
-        fold_no,
-        data_dir,
-        cache_folds,
-        use_cache,
-        folds_cache_path,
-        **kwargs,
-    ):
-        # set_paths = [set_paths[0]]
+def read_images(folders, videos_len, select_frames, stage, resize, fold_no, cache_folds, use_cache, folds_cache_path, **kwargs):
+    def _read_images():
+        all_video_frames = torch.zeros(len(folders), select_frames, 3, resize, resize)
 
-        self.data_dir = data_dir
-        self.select_frames = select_frames
-        self.stage = stage
-        self.loaded_videos = None
-        self.fold_no = fold_no
-        self.resize = resize
-
-        if stage == "train":
-            self.transform = transforms.Compose(
+        if stage == "train" or stage == "val":
+            transform = transforms.Compose(
                 [
                     transforms.Resize([resize, resize]),
                     transforms.ToTensor(),
@@ -77,93 +88,61 @@ class FrameReader():
                     ),
                 ]
             )
-        elif stage == "val":
-            self.transform = transforms.Compose(
-                [
-                    transforms.Resize([resize, resize]),
-                    transforms.ToTensor(),
-                    transforms.Normalize(
-                        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                    ),
-                ]
-            )            
-
-        self.folders = folders
-        self.labels = labels
-
-        loaded_dataset_path = os.path.join(
-            folds_cache_path, f"sbu_{stage}_fold={fold_no}.pkl"
-        )
-        if os.path.exists(loaded_dataset_path) and use_cache:
-            print(f"Using cached {stage} data.")
-            with open(loaded_dataset_path, "rb") as f:
-                self.loaded_videos = pickle.load(f)
-        else:
-            if cache_folds and not os.path.exists(folds_cache_path):
-                raise Exception(
-                    f"Directory {folds_cache_path} not found! Create directory and re-run."
-                )
-
-            self.loaded_videos = self._load_videos()
-
-            if os.getenv("SLURM_LOCALID", '0') == '0' and cache_folds:
-                with open(loaded_dataset_path, "wb") as f:
-                    print(f"Writing {stage} fold {fold_no} to cache.")
-                    pickle.dump(self.loaded_videos, f)
-
-
-    def _load_videos(self):
-        """
-        Reads RGB images and pose data. Folders to read from are found from meta-data.
-
-        Parameters
-        ----------
-        None
-
-        Returns
-        -------
-        output : list [(loaded_frames, video_pose_values)]
-            loaded_frames : 4D Tensor of shape (#frames, #channels, resize, resize)
-            video_pose_values : 2D Tensor of shape (#frames, 90) containing normalized x,y,z pose coordinates for each of 
-            15 keypoints for both participants in each frame. First 45 values correspond to participant 1 and next 45 to 
-            participant 2.
-
-        """
-
-        # load image data
-        all_video_frames = torch.zeros(len(self.folders), self.select_frames, 3, self.resize, self.resize)
-        all_video_poses = torch.zeros(len(self.folders), self.select_frames, 90)
-        with tqdm(self.folders) as pbar:
-            pbar.set_description(f"Reading {self.stage} fold {self.fold_no} data!")
+        
+        with tqdm(folders) as pbar:
+            pbar.set_description(f"Reading {stage} fold {fold_no} images!")
 
             for index, video_pth in enumerate(pbar):
-                video_len = self.video_len[index]
-                start_idx = (video_len - self.select_frames) // 2
-                end_idx = start_idx + self.select_frames
+                video_len = videos_len[index]
+                start_idx = (video_len - select_frames) // 2
+                end_idx = start_idx + select_frames
 
                 frame_pths = sorted(glob.glob(f"{video_pth}/rgb*"))
                 reqd_frame_pths = frame_pths[start_idx:end_idx]
                 loaded_frames = torch.zeros(
-                    self.select_frames, 3, self.resize, self.resize, dtype=torch.float32
+                    select_frames, 3, resize, resize, dtype=torch.float32
                 )
                 for idx, frame_pth in enumerate(reqd_frame_pths):
                     frame = Image.open(frame_pth).convert("RGB")
                     frame = (
-                        self.transform(frame) if self.transform is not None else frame
-                    )  # impose transformation if exists
+                        transform(frame) if transform is not None else frame
+                    )
                     loaded_frames[idx] = frame
 
                 all_video_frames[index] = loaded_frames
+            
+        return all_video_frames
+
+    cacher = Cache(cache_folds, use_cache)
+    cache_path = os.path.join(
+            folds_cache_path, f"sbu_{stage}_fold={fold_no}_images.pkl"
+        )
+
+    loaded_videos = cacher.read(cache_path, f"Reading {stage} fold={fold_no} images from cache")
+    if loaded_videos is None:
+        loaded_videos = _read_images()
+    cacher.write(loaded_videos, cache_path, f"Writing {stage} fold={fold_no} images as cache")
+
+    return loaded_videos
+
+def read_poses(folders, videos_len, select_frames, stage, fold_no, cache_folds, use_cache, folds_cache_path, **kwargs):
+    def _read_poses():
+        all_video_poses = torch.zeros(len(folders), select_frames, 90)
+        with tqdm(folders) as pbar:
+            pbar.set_description(f"Reading {stage} fold {fold_no} poses!")
+
+            for index, video_pth in enumerate(pbar):
+                video_len = videos_len[index]
+                start_idx = (video_len - select_frames) // 2
+                end_idx = start_idx + select_frames
 
                 # load pose data
                 with open(os.path.join(video_pth, "skeleton_pos.txt"), "r") as f:
                     pose_data = f.readlines()
 
-                assert len(frame_pths) == len(pose_data), "pose data loaded incorrectly"
-
                 reqd_pose_data = pose_data[start_idx:end_idx]
 
-                video_pose_values = torch.zeros(self.select_frames, 90, dtype=torch.float32)
+                video_pose_values = torch.zeros(select_frames, 90, dtype=torch.float32)
                 for frame_idx, row in enumerate(reqd_pose_data):
                     posture_data = [x.strip() for x in row.split(",")]
                     frame_pose_values = torch.tensor([float(x) for x in posture_data[1:]])
@@ -175,147 +154,19 @@ class FrameReader():
 
                 all_video_poses[index] = video_pose_values
             
-        return {"frames":all_video_frames, "poses":all_video_poses}
+        return all_video_poses
 
-    def __len__(self):
-        return len(self.folders)
-
-class PoseReader():
-    def __init__(
-        self,
-        set_paths,
-        select_frames,
-        stage,
-        resize,
-        fold_no,
-        data_dir,
-        cache_folds,
-        use_cache,
-        folds_cache_path,
-        **kwargs,
-    ):
-        # set_paths = [set_paths[0]]
-
-        self.data_dir = data_dir
-        self.select_frames = select_frames
-        self.stage = stage
-        self.loaded_videos = None
-        self.fold_no = fold_no
-        self.resize = resize
-
-        if stage == "train":
-            self.transform = transforms.Compose(
-                [
-                    transforms.Resize([resize, resize]),
-                    transforms.ToTensor(),
-                    transforms.Normalize(
-                        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                    ),
-                ]
-            )
-        elif stage == "val":
-            self.transform = transforms.Compose(
-                [
-                    transforms.Resize([resize, resize]),
-                    transforms.ToTensor(),
-                    transforms.Normalize(
-                        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                    ),
-                ]
-            )            
-
-        self.folders, self.labels, self.video_len = list(
-            zip(*self._get_video_metdata(set_paths))
+    cacher = Cache(cache_folds, use_cache)
+    cache_path = os.path.join(
+            folds_cache_path, f"sbu_{stage}_fold={fold_no}_poses.pkl"
         )
 
-        loaded_dataset_path = os.path.join(
-            folds_cache_path, f"sbu_{stage}_fold={fold_no}.pkl"
-        )
-        if os.path.exists(loaded_dataset_path) and use_cache:
-            print(f"Using cached {stage} data.")
-            with open(loaded_dataset_path, "rb") as f:
-                self.loaded_videos = pickle.load(f)
-        else:
-            if cache_folds and not os.path.exists(folds_cache_path):
-                raise Exception(
-                    f"Directory {folds_cache_path} not found! Create directory and re-run."
-                )
+    loaded_poses = cacher.read(cache_path, f"Reading {stage} fold={fold_no} poses from cache")
+    if loaded_poses is None:
+        loaded_poses = _read_poses()
+    cacher.write(loaded_poses, cache_path, f"Writing {stage} fold={fold_no} poses as cache")    
 
-            self.loaded_videos = self._load_videos()
-
-            if os.getenv("SLURM_LOCALID", '0') == '0' and cache_folds:
-                with open(loaded_dataset_path, "wb") as f:
-                    print(f"Writing {stage} fold {fold_no} to cache.")
-                    pickle.dump(self.loaded_videos, f)
-
-    def _load_videos(self):
-        """
-        Reads RGB images and pose data. Folders to read from are found from meta-data.
-
-        Parameters
-        ----------
-        None
-
-        Returns
-        -------
-        output : list [(loaded_frames, video_pose_values)]
-            loaded_frames : 4D Tensor of shape (#frames, #channels, resize, resize)
-            video_pose_values : 2D Tensor of shape (#frames, 90) containing normalized x,y,z pose coordinates for each of 
-            15 keypoints for both participants in each frame. First 45 values correspond to participant 1 and next 45 to 
-            participant 2.
-
-        """
-
-        all_video_poses = torch.zeros(len(self.folders), self.select_frames, 90)
-        with tqdm(self.folders) as pbar:
-            pbar.set_description(f"Reading {self.stage} fold {self.fold_no} data!")
-
-            for index, video_pth in enumerate(pbar):
-                video_len = self.video_len[index]
-                start_idx = (video_len - self.select_frames) // 2
-                end_idx = start_idx + self.select_frames
-
-                frame_pths = sorted(glob.glob(f"{video_pth}/rgb*"))
-                reqd_frame_pths = frame_pths[start_idx:end_idx]
-                loaded_frames = torch.zeros(
-                    self.select_frames, 3, self.resize, self.resize, dtype=torch.float32
-                )
-                for idx, frame_pth in enumerate(reqd_frame_pths):
-                    frame = Image.open(frame_pth).convert("RGB")
-                    frame = (
-                        self.transform(frame) if self.transform is not None else frame
-                    )  # impose transformation if exists
-                    loaded_frames[idx] = frame
-
-                all_video_frames[index] = loaded_frames
-
-                # load pose data
-                with open(os.path.join(video_pth, "skeleton_pos.txt"), "r") as f:
-                    pose_data = f.readlines()
-
-                assert len(frame_pths) == len(pose_data), "pose data loaded incorrectly"
-
-                reqd_pose_data = pose_data[start_idx:end_idx]
-
-                video_pose_values = torch.zeros(self.select_frames, 90, dtype=torch.float32)
-                for frame_idx, row in enumerate(reqd_pose_data):
-                    posture_data = [x.strip() for x in row.split(",")]
-                    frame_pose_values = torch.tensor([float(x) for x in posture_data[1:]])
-                    assert (
-                        len(frame_pose_values) == 90
-                    ), "incorrect number of pose values"
-
-                    video_pose_values[frame_idx] = frame_pose_values
-
-                all_video_poses[index] = video_pose_values
-            
-        return {"frames":all_video_frames, "poses":all_video_poses}
-
-    def __len__(self):
-        return len(self.folders)
-
-    def __getitem__(self, index):
-        raise NotImplementedError()
+    return loaded_poses
 
 class M1_SBU_Dataset(data.Dataset):
     """
@@ -328,52 +179,25 @@ class M1_SBU_Dataset(data.Dataset):
         stage,
         resize,
         fold_no,
-        data_dir,
         cache_folds,
         use_cache,
         folds_cache_path,
         **kwargs,
     ):
+
         # set_paths = [set_paths[0]]
 
-       self.folders, self.labels, self.video_len = list(
+        self.folders, self.labels, self.videos_len = list(
             zip(*get_video_metdata(set_paths))
         )
 
-        self.frame_reader = FrameReader()
+        self.loaded_videos = read_images(self.folders, self.videos_len, select_frames, stage, resize, fold_no, cache_folds, use_cache, folds_cache_path)       
 
-        self.data_dir = data_dir
-        self.select_frames = select_frames
-        self.stage = stage
-        self.loaded_videos = None
-        self.fold_no = fold_no
-        self.resize = resize
-
-        if stage == "train":
-            self.transform = transforms.Compose(
-                [
-                    transforms.Resize([resize, resize]),
-                    transforms.ToTensor(),
-                    transforms.Normalize(
-                        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                    ),
-                ]
-            )
-        elif stage == "val":
-            self.transform = transforms.Compose(
-                [
-                    transforms.Resize([resize, resize]),
-                    transforms.ToTensor(),
-                    transforms.Normalize(
-                        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                    ),
-                ]
-            )            
-
- 
+    def __len__(self):
+        return len(self.folders)
 
     def __getitem__(self, index):
-        X = self.loaded_videos['frames'][index]
+        X = self.loaded_videos[index]
         y = torch.LongTensor([self.labels[index]])
         return X, y
 
