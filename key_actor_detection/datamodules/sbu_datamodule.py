@@ -10,9 +10,7 @@ from tqdm import tqdm
 import shutil
 import glob
 
-
 from .datasets.sbu_dataset import M1_SBU_Dataset, M2_SBU_Dataset, M3_SBU_Dataset, M4_SBU_Dataset
-
 
 class SBUDataModule(pl.LightningDataModule):
     def __init__(self, CFG):
@@ -51,16 +49,6 @@ class SBUDataModule(pl.LightningDataModule):
             [4, 6, 8, 11],
             [12, 13, 14, 17, 18],
         ]
-
-        if "resize" in CFG[CFG.training.model]:
-            self.resize = CFG[CFG.training.model]["resize"]
-        else:
-            print(
-                "NOTE : Frame features not used for this model. Resizing to 224x224."
-            )
-            self.resize = 224
-
-        self.select_frames = 10
 
     def prepare_data(self):
         if os.path.exists(self.data_dir):
@@ -161,87 +149,71 @@ class SBUDataModule(pl.LightningDataModule):
         if self.CFG.training.model == "model1":
             self.train_dataset = M1_SBU_Dataset(
                 reqd_train_set_paths,
-                self.select_frames,
+                self.CFG["training"]["select_frames"],
                 "train",
-                self.resize,
+                self.CFG["model1"]["resize"],
                 fold_no,
                 **self.CFG.caching
             )
             self.val_dataset = M1_SBU_Dataset(
                 reqd_val_set_paths,
-                self.select_frames,
+                self.CFG["training"]["select_frames"],
                 "val",
-                self.resize,
+                self.CFG["model1"]["resize"],
                 fold_no,
                 **self.CFG.caching
             )
         elif self.CFG.training.model == "model2":
             self.train_dataset = M2_SBU_Dataset(
-                self.CFG["model2"].num_keypoints,
-                self.CFG["model2"].coords_per_keypoint,
                 reqd_train_set_paths,
-                self.select_frames,
+                self.CFG["training"]["select_frames"],
                 "train",
-                self.resize,
+                self.CFG["model2"].coords_per_keypoint,
                 fold_no,
-                self.data_dir,
                 **self.CFG.caching
             )
             self.val_dataset = M2_SBU_Dataset(
-                self.CFG["model2"].num_keypoints,
-                self.CFG["model2"].coords_per_keypoint,
                 reqd_val_set_paths,
-                self.select_frames,
+                self.CFG["training"]["select_frames"],
                 "val",
-                self.resize,
+                self.CFG["model2"].coords_per_keypoint,
                 fold_no,
-                self.data_dir,
                 **self.CFG.caching
             )
         elif self.CFG.training.model == "model3":
             self.train_dataset = M3_SBU_Dataset(
-                self.CFG["model3"].num_keypoints,
-                self.CFG["model3"].coords_per_keypoint,
                 reqd_train_set_paths,
-                self.select_frames,
+                self.CFG["training"]["select_frames"],
                 "train",
-                self.resize,
+                self.CFG["model3"].coords_per_keypoint,
                 fold_no,
-                self.data_dir,
                 **self.CFG.caching
             )
             self.val_dataset = M3_SBU_Dataset(
-                self.CFG["model3"].num_keypoints,
-                self.CFG["model3"].coords_per_keypoint,
                 reqd_val_set_paths,
-                self.select_frames,
+                self.CFG["training"]["select_frames"],
                 "val",
-                self.resize,
+                self.CFG["model3"].coords_per_keypoint,
                 fold_no,
-                self.data_dir,
                 **self.CFG.caching
             )
         elif self.CFG.training.model == "model4":
             self.train_dataset = M4_SBU_Dataset(
-                self.CFG["model4"].num_keypoints,
-                self.CFG["model4"].coords_per_keypoint,
                 reqd_train_set_paths,
-                self.select_frames,
+                self.CFG["training"]["select_frames"],
                 "train",
-                self.resize,
+                self.CFG["model4"]["resize"],
+                self.CFG["model4"].coords_per_keypoint,
                 fold_no,
-                self.data_dir,
                 **self.CFG.caching
             )
             self.val_dataset = M4_SBU_Dataset(
-                self.CFG["model4"].num_keypoints,
-                self.CFG["model4"].coords_per_keypoint,
                 reqd_val_set_paths,
-                self.select_frames,
+                self.CFG["training"]["select_frames"],
                 "val",
-                self.resize,
+                self.CFG["model4"]["resize"],
+                self.CFG["model4"].coords_per_keypoint,
                 fold_no,
-                self.data_dir,
                 **self.CFG.caching
             )
         else:
@@ -276,32 +248,32 @@ if __name__ == "__main__":
         print(f"frames = {batch[0].shape} , y = {batch[1].shape}")
         break
 
-    # print("\nModel 2 Test")
-    # CFG.training.model = "model2"
-    # dm = SBUDataModule(CFG)
-    # dm.prepare_data()
-    # dm.setup(fold_no=1)
-    # for batch in dm.train_dataloader():
-    #     print(f"pose = {batch[0].shape} , y = {batch[1].shape}")
-    #     break
+    print("\nModel 2 Test")
+    CFG.training.model = "model2"
+    dm = SBUDataModule(CFG)
+    dm.prepare_data()
+    dm.setup(fold_no=1)
+    for batch in dm.train_dataloader():
+        print(f"pose = {batch[0].shape} , y = {batch[1].shape}")
+        break
 
-    # print("\nModel 3 Test")
-    # CFG.training.model = "model3"
-    # dm = SBUDataModule(CFG)
-    # dm.prepare_data()
-    # dm.setup(fold_no=1)
-    # for batch in dm.train_dataloader():
-    #     print(f"pose = {batch[0].shape} , y = {batch[1].shape}")
-    #     break
+    print("\nModel 3 Test")
+    CFG.training.model = "model3"
+    dm = SBUDataModule(CFG)
+    dm.prepare_data()
+    dm.setup(fold_no=1)
+    for batch in dm.train_dataloader():
+        print(f"pose = {batch[0].shape} , y = {batch[1].shape}")
+        break
 
-    # print("\nModel 4 Test")
-    # CFG.training.model = "model4"
-    # dm = SBUDataModule(CFG)
-    # dm.prepare_data()
-    # dm.setup(fold_no=1)
-    # for batch in dm.train_dataloader():
-    #     print(
-    #         f"frames = {batch[0].shape} , pose = {batch[1].shape}, y = {batch[2].shape}"
-    #     )
-    #     break
+    print("\nModel 4 Test")
+    CFG.training.model = "model4"
+    dm = SBUDataModule(CFG)
+    dm.prepare_data()
+    dm.setup(fold_no=1)
+    for batch in dm.train_dataloader():
+        print(
+            f"frames = {batch[0].shape} , pose = {batch[1].shape}, y = {batch[2].shape}"
+        )
+        break
 

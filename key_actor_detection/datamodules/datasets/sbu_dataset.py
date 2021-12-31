@@ -38,7 +38,7 @@ class Cache():
                     print(message)
                 pickle.dump(cache_item, f)  
 
-def get_video_metdata(set_paths):
+def _get_video_metadata(set_paths):
     """
     Gets meta data from the dataset.
 
@@ -188,7 +188,7 @@ class M1_SBU_Dataset(data.Dataset):
         # set_paths = [set_paths[0]]
 
         self.folders, self.labels, self.videos_len = list(
-            zip(*get_video_metdata(set_paths))
+            zip(*_get_video_metadata(set_paths))
         )
 
         self.loaded_videos = read_images(self.folders, self.videos_len, select_frames, stage, resize, fold_no, cache_folds, use_cache, folds_cache_path)       
@@ -207,27 +207,45 @@ class M2_SBU_Dataset(data.Dataset):
     dataloader for model 2
     """
 
-    def __init__(self, num_keypoints, coords_per_keypoint, *args, **kwargs):
-        super(M2_SBU_Dataset, self).__init__(*args, **kwargs)
+    def __init__(
+        self,
+        set_paths,
+        select_frames,
+        stage,
+        coords_per_keypoint,
+        fold_no,
+        cache_folds,
+        use_cache,
+        folds_cache_path,
+        *args,
+        **kwargs,
+    ):
+
+        self.folders, self.labels, self.videos_len = list(
+            zip(*_get_video_metadata(set_paths))
+        )
+
         self.keypoints_per_person = None
-        self.loaded_poses = None
+        self.loaded_poses = read_poses(self.folders, self.videos_len, select_frames, stage, fold_no, cache_folds, use_cache, folds_cache_path)
 
         if coords_per_keypoint == 2:
             idxs = torch.tensor([i for i in range(90) if (i + 1) % 3 != 0])
-            self.loaded_poses = [x[:, idxs] for x in self.loaded_videos['poses']]
+            self.loaded_poses = [x[:, idxs] for x in self.loaded_poses]
+            self.keypoints_per_person = 30
         elif coords_per_keypoint == 3:
-            self.loaded_poses = self.loaded_videos['poses']
+            self.keypoints_per_person = 45
         else:
-            raise Exception("invalid dim in M2_SBU_Dataset! Must be either 2 or 3.")
-            
-        self.keypoints_per_person = num_keypoints * coords_per_keypoint
+            raise Exception("invalid coords_per_keypoint in M2_SBU_Dataset! Must be either 2 or 3.")
+
+    def __len__(self):
+        return len(self.folders)
 
     def __getitem__(self, index):
         pose_values = self.loaded_poses[index]
         pose_values = pose_values.view(-1, 2, self.keypoints_per_person)
         avg_pose = torch.mean(
             pose_values, 1
-        )  # if dim=2, shape = (T,30) else shape = (T,45)
+        )  # if coords_per_keypoint=2, shape = (T,30) else shape = (T,45)
         y = torch.LongTensor([self.labels[index]])
 
         return avg_pose, y
@@ -237,6 +255,39 @@ class M3_SBU_Dataset(data.Dataset):
     """
     dataloader for model 3
     """
+
+    def __init__(
+        self,
+        set_paths,
+        select_frames,
+        stage,
+        coords_per_keypoint,
+        fold_no,
+        cache_folds,
+        use_cache,
+        folds_cache_path,
+        *args,
+        **kwargs,
+    ):
+
+        self.folders, self.labels, self.videos_len = list(
+            zip(*_get_video_metadata(set_paths))
+        )
+
+        self.keypoints_per_person = None
+        self.loaded_poses = read_poses(self.folders, self.videos_len, select_frames, stage, fold_no, cache_folds, use_cache, folds_cache_path)
+
+        if coords_per_keypoint == 2:
+            idxs = torch.tensor([i for i in range(90) if (i + 1) % 3 != 0])
+            self.loaded_poses = [x[:, idxs] for x in self.loaded_poses]
+            self.keypoints_per_person = 30
+        elif coords_per_keypoint == 3:
+            self.keypoints_per_person = 45
+        else:
+            raise Exception("invalid coords_per_keypoint in M2_SBU_Dataset! Must be either 2 or 3.")
+
+    def __len__(self):
+        return len(self.folders)
 
     def __getitem__(self, index):
         pose_values = self.loaded_poses[index]
@@ -253,10 +304,45 @@ class M4_SBU_Dataset(data.Dataset):
     """
     dataloader for model 4.
     """
+    def __init__(
+        self,
+        set_paths,
+        select_frames,
+        stage,
+        resize,
+        coords_per_keypoint,
+        fold_no,
+        cache_folds,
+        use_cache,
+        folds_cache_path,
+        *args,
+        **kwargs,
+    ):
+
+        self.folders, self.labels, self.videos_len = list(
+            zip(*_get_video_metadata(set_paths))
+        )
+
+        self.keypoints_per_person = None
+
+        self.loaded_videos = read_images(self.folders, self.videos_len, select_frames, stage, resize, fold_no, cache_folds, use_cache, folds_cache_path)       
+        self.loaded_poses = read_poses(self.folders, self.videos_len, select_frames, stage, fold_no, cache_folds, use_cache, folds_cache_path)
+
+        if coords_per_keypoint == 2:
+            idxs = torch.tensor([i for i in range(90) if (i + 1) % 3 != 0])
+            self.loaded_poses = [x[:, idxs] for x in self.loaded_poses]
+            self.keypoints_per_person = 30
+        elif coords_per_keypoint == 3:
+            self.keypoints_per_person = 45
+        else:
+            raise Exception("invalid coords_per_keypoint in M2_SBU_Dataset! Must be either 2 or 3.")
+
+    def __len__(self):
+        return len(self.folders)
 
     def __getitem__(self, index):
         # load frames : shape (10,3,224,224)
-        frames = self.loaded_videos['frames'][index]
+        frames = self.loaded_videos[index]
 
         # load poses
         pose_values = self.loaded_poses[index]
