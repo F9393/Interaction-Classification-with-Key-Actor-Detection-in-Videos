@@ -29,7 +29,7 @@ Model 4 - Frame level features + Weighted pose features <br />
 
 ## Datasets
 - [x] SBU Kinect Dataset
-- [ ] Hockey Dataset
+- [x] Hockey Dataset
 
 ## Training
 The models can be trained either on a single GPU, multiple GPUs on the same machine or on multiple GPUs across nodes managed by SLURM. The latter two uses distributed dataparallel where each GPU is associated with a separate training process.
