@@ -68,7 +68,7 @@ class Model1(nn.Module):
 
 
 class Model2(nn.Module):
-    def __init__(self, eventLSTM, coords_per_keypoint, num_classes, **kwargs):
+    def __init__(self, eventLSTM, num_keypoints, coords_per_keypoint, num_classes, **kwargs):
         """
         Parameters
         ----------
@@ -85,10 +85,7 @@ class Model2(nn.Module):
 
         super(Model2, self).__init__()
 
-        if coords_per_keypoint == 2:
-            pose_dim = 30
-        elif coords_per_keypoint == 3:
-            pose_dim = 45
+        pose_dim = num_keypoints * coords_per_keypoint
 
         self.eventLSTM = EventLSTM(input_size=pose_dim, **eventLSTM)
         self.fc = nn.Linear(
@@ -114,7 +111,7 @@ class Model2(nn.Module):
 
 
 class Model3(nn.Module):
-    def __init__(self, eventLSTM, coords_per_keypoint, num_classes, attention_type, **kwargs):
+    def __init__(self, eventLSTM, num_keypoints, coords_per_keypoint, num_classes, attention_type, **kwargs):
         """
         Parameters
         ----------
@@ -132,10 +129,7 @@ class Model3(nn.Module):
 
         super(Model3, self).__init__()
 
-        if coords_per_keypoint == 2:
-            pose_dim = 30
-        elif coords_per_keypoint == 3:
-            pose_dim = 45
+        pose_dim = num_keypoints * coords_per_keypoint
 
         self.hidden_size = eventLSTM["hidden_size"]
         if attention_type == 1:
@@ -185,6 +179,7 @@ class Model4(nn.Module):
         frameLSTM,
         CNN_embed_dim,
         eventLSTM,
+        num_keypoints,
         coords_per_keypoint,
         num_classes,
         attention_params,
@@ -219,10 +214,7 @@ class Model4(nn.Module):
 
         super(Model4, self).__init__()
 
-        if coords_per_keypoint == 2:
-            pose_dim = 30
-        elif coords_per_keypoint == 3:
-            pose_dim = 45
+        pose_dim = num_keypoints * coords_per_keypoint
 
         self.encoder = Encoder(CNN_embed_dim=CNN_embed_dim)
         self.frameLSTM = FrameLSTM(input_size=CNN_embed_dim, **frameLSTM)

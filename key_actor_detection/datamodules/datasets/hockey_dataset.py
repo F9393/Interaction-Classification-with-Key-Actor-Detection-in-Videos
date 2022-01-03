@@ -3,7 +3,6 @@ from PIL import Image
 import torch
 import torchvision.transforms as transforms
 from torch.utils import data
-from tqdm import tqdm
 import json
 from collections import OrderedDict
 import numpy as np
@@ -21,7 +20,7 @@ class FrameReader():
         self.stage = stage
         self.num_frames = num_frames
 
-        if stage == "train":
+        if stage == "train" or stage == "val":
             self.transform = transforms.Compose(
                 [
                     transforms.Resize([resize, resize]),
@@ -30,17 +29,7 @@ class FrameReader():
                         mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
                     ),
                 ]
-            )
-        elif stage == "val":
-            self.transform = transforms.Compose(
-                [
-                    transforms.Resize([resize, resize]),
-                    transforms.ToTensor(),
-                    transforms.Normalize(
-                        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                    ),
-                ]
-            )            
+            )         
 
     def read_images(self, path):
         X = []
@@ -72,7 +61,11 @@ class PoseReader():
         self.poses_and_masks = self.generate_pose_and_masks()
 
     def generate_pose_and_masks(self):
-        # Uses only x,y coordinates. Removes every third element from the poses (confidence is always 1).
+        """
+        Uses only x,y coordinates. Removes every third element from the poses (confidence is always 1).
+        Returns tuple(pose:[64,15,40], mask:[64,15,40]) i.e #frames,#max_players,#keypoint values
+        """
+        
         poses_and_masks = {}
         for penalty_dir in self.X_dirs:
             self.poses = np.zeros((self.num_frames, self.max_players, self.num_keypoints*self.coords_per_keypoint), dtype='float32')
@@ -114,8 +107,8 @@ class M1_HockeyDataset(data.Dataset):
         penalty_dir = self.X_dirs[index]
 
         # Load data
-        X = self.frame_reader.read_images(penalty_dir)     # (input) spatial images
-        y = torch.LongTensor([self.y[index]])                  # (labels) LongTensor are for int64 instead of FloatTensor
+        X = self.frame_reader.read_images(penalty_dir)    
+        y = torch.LongTensor([self.y[index]])                  
         return X, y
 
 

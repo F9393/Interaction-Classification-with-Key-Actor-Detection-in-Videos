@@ -2,7 +2,7 @@ dataset_name: "Hockey"
 dataset_path: "/usr/local/data01/rohitram/hockey_dataset"
 
 num_nodes: 1 # number of nodes
-gpus: null # list of gpu indices on each node
+gpus: [0] # list of gpu indices on each node
   
 training:    
   train_dataloader:
@@ -51,7 +51,7 @@ model2:
     forget_gate_bias: "default"
 
 model3:
-  num_classes: 8
+  num_classes: 3
   max_players: 15
   num_keypoints: 20 
   coords_per_keypoint: 2
@@ -65,7 +65,7 @@ model3:
 model4:
   resize: 224       
   CNN_embed_dim: 256
-  num_classes: 8 
+  num_classes: 3
   max_players: 15
   num_keypoints: 20
   coords_per_keypoint: 2

@@ -72,8 +72,13 @@ class KeyActorDetection(pl.LightningModule):
 
 def train(CFG):
     for fold_no in CFG.training.folds:
-        # once PL version 1.6 releases, we can shift below 2 statements outside the for loop
-        dm = SBUDataModule(CFG)
+        # once PL version 1.6 releases, we can shift below 2 statements outside the for loop (currently dm.setup() is called only once)
+        if CFG.dataset_name == "SBU":
+            dm = SBUDataModule(CFG)
+        elif CFG.dataset_name == "Hockey":
+            dm = HockeyDataModule(CFG)
+        else:
+            raise Exception("Invalid dataset! Must be one of 'SBU' or 'Hockey'")
         dm.prepare_data()
         dm.setup(fold_no = fold_no)
         results = []
