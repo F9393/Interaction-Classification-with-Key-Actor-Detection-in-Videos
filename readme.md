@@ -31,6 +31,25 @@ Model 4 - Frame level features + Weighted pose features <br />
 - [x] SBU Kinect Dataset
 - [x] Hockey Dataset
 
+Hockey dataset directory structure - 
+
+```
+.
+└── hockey_dataset/
+    ├── No_penalty/
+    │   ├── _2017-11-05-col-nyi-home10/
+    │   │   ├── frame_0000.png
+    │   │   ├── ...
+    │   │   ├── frame_0063.png
+    │   │   └── skeleton.json
+    │   ├── _2017-11-11-nyi-stl-home492
+    │   └── ...
+    ├── Slashing/
+    │   └── ...
+    └── Tripping/
+        └── ...
+```
+
 ## Training
 The models can be trained either on a single GPU, multiple GPUs on the same machine or on multiple GPUs across nodes managed by SLURM. The latter two uses distributed dataparallel where each GPU is associated with a separate training process.
 
@@ -39,9 +58,9 @@ Hyperparameters can be defined in the configuration file `(e.g in configs/sbu.ya
 
 ### On Local Machine
 
-- Define hyperparameters in `configs/sbu.yaml`. Then run - 
+- Define hyperparameters in `configs/sbu.yaml` or `configs/hockey_dataset.yaml`. Then run - 
 	```bash
-	python run.py configs/sbu.yaml
+	python run.py configs/sbu.yaml or python run.py configs/hockey_dataset.yaml
 	```
 	
 - Override values in config file through command line arguments -
