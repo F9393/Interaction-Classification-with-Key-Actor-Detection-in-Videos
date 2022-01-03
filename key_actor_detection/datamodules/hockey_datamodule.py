@@ -28,28 +28,28 @@ class HockeyDataModule(pl.LightningDataModule):
                 (X_train_dirs, y_train),
                 self.CFG["model1"].resize,
                 "train",
-                self.CFG["model1"].num_frames,
+                self.CFG["training"].num_frames,
             )
             self.val_dataset = M1_HockeyDataset(
                 (X_test_dirs, y_test),
                 self.CFG["model1"].resize,
                 "val",
-                self.CFG["model1"].num_frames,
+                self.CFG["training"].num_frames,
             )
         elif self.CFG.training.model == "model2":
             self.train_dataset = M2_HockeyDataset(
                 (X_train_dirs, y_train),
                 "train",
-                self.CFG["model2"].num_frames,
-                self.CFG["model2"].max_players,
+                self.CFG["training"].num_frames,
+                self.CFG["training"].max_players,
                 self.CFG["model2"].num_keypoints,
                 self.CFG["model2"].coords_per_keypoint,
             )
             self.val_dataset = M2_HockeyDataset(
                 (X_test_dirs, y_test),
                 "val",
-                self.CFG["model2"].num_frames,
-                self.CFG["model2"].max_players,
+                self.CFG["training"].num_frames,
+                self.CFG["training"].max_players,
                 self.CFG["model2"].num_keypoints,
                 self.CFG["model2"].coords_per_keypoint,
             )
@@ -57,16 +57,16 @@ class HockeyDataModule(pl.LightningDataModule):
             self.train_dataset = M3_HockeyDataset(
                 (X_train_dirs, y_train),
                 "train",
-                self.CFG["model3"].num_frames,
-                self.CFG["model3"].max_players,
+                self.CFG["training"].num_frames,
+                self.CFG["training"].max_players,
                 self.CFG["model3"].num_keypoints,
                 self.CFG["model3"].coords_per_keypoint,
             )
             self.val_dataset = M3_HockeyDataset(
                 (X_test_dirs, y_test),
                 "val",
-                self.CFG["model3"].num_frames,
-                self.CFG["model3"].max_players,
+                self.CFG["training"].num_frames,
+                self.CFG["training"].max_players,
                 self.CFG["model3"].num_keypoints,
                 self.CFG["model3"].coords_per_keypoint,
             ) 
@@ -75,8 +75,8 @@ class HockeyDataModule(pl.LightningDataModule):
                 (X_train_dirs, y_train),
                 self.CFG["model4"].resize,
                 "train",
-                self.CFG["model4"].num_frames,
-                self.CFG["model4"].max_players,
+                self.CFG["training"].num_frames,
+                self.CFG["training"].max_players,
                 self.CFG["model4"].num_keypoints,
                 self.CFG["model4"].coords_per_keypoint,
             )
@@ -84,8 +84,8 @@ class HockeyDataModule(pl.LightningDataModule):
                 (X_test_dirs, y_test),
                 self.CFG["model4"].resize,
                 "val",
-                self.CFG["model4"].num_frames,
-                self.CFG["model4"].max_players,
+                self.CFG["training"].num_frames,
+                self.CFG["training"].max_players,
                 self.CFG["model4"].num_keypoints,
                 self.CFG["model4"].coords_per_keypoint,
             )

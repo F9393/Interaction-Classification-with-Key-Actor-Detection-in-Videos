@@ -74,9 +74,9 @@ def _get_video_metadata(set_paths):
                 all_data.append((run_path, label, num_frames))
     return all_data          
 
-def read_images(folders, videos_len, select_frames, stage, resize, fold_no, cache_folds, use_cache, folds_cache_path, **kwargs):
+def read_images(folders, videos_len, num_frames, stage, resize, fold_no, cache_folds, use_cache, folds_cache_path, **kwargs):
     def _read_images():
-        all_video_frames = torch.zeros(len(folders), select_frames, 3, resize, resize)
+        all_video_frames = torch.zeros(len(folders), num_frames, 3, resize, resize)
 
         if stage == "train" or stage == "val":
             transform = transforms.Compose(
@@ -94,13 +94,13 @@ def read_images(folders, videos_len, select_frames, stage, resize, fold_no, cach
 
             for index, video_pth in enumerate(pbar):
                 video_len = videos_len[index]
-                start_idx = (video_len - select_frames) // 2
-                end_idx = start_idx + select_frames
+                start_idx = (video_len - num_frames) // 2
+                end_idx = start_idx + num_frames
 
                 frame_pths = sorted(glob.glob(f"{video_pth}/rgb*"))
                 reqd_frame_pths = frame_pths[start_idx:end_idx]
                 loaded_frames = torch.zeros(
-                    select_frames, 3, resize, resize, dtype=torch.float32
+                    num_frames, 3, resize, resize, dtype=torch.float32
                 )
                 for idx, frame_pth in enumerate(reqd_frame_pths):
                     frame = Image.open(frame_pth).convert("RGB")
@@ -125,16 +125,16 @@ def read_images(folders, videos_len, select_frames, stage, resize, fold_no, cach
 
     return loaded_videos
 
-def read_poses(folders, videos_len, select_frames, stage, fold_no, cache_folds, use_cache, folds_cache_path, **kwargs):
+def read_poses(folders, videos_len, num_frames, stage, fold_no, cache_folds, use_cache, folds_cache_path, **kwargs):
     def _read_poses():
-        all_video_poses = torch.zeros(len(folders), select_frames, 90)
+        all_video_poses = torch.zeros(len(folders), num_frames, 90)
         with tqdm(folders) as pbar:
             pbar.set_description(f"Reading {stage} fold {fold_no} poses!")
 
             for index, video_pth in enumerate(pbar):
                 video_len = videos_len[index]
-                start_idx = (video_len - select_frames) // 2
-                end_idx = start_idx + select_frames
+                start_idx = (video_len - num_frames) // 2
+                end_idx = start_idx + num_frames
 
                 # load pose data
                 with open(os.path.join(video_pth, "skeleton_pos.txt"), "r") as f:
@@ -142,7 +142,7 @@ def read_poses(folders, videos_len, select_frames, stage, fold_no, cache_folds, 
 
                 reqd_pose_data = pose_data[start_idx:end_idx]
 
-                video_pose_values = torch.zeros(select_frames, 90, dtype=torch.float32)
+                video_pose_values = torch.zeros(num_frames, 90, dtype=torch.float32)
                 for frame_idx, row in enumerate(reqd_pose_data):
                     posture_data = [x.strip() for x in row.split(",")]
                     frame_pose_values = torch.tensor([float(x) for x in posture_data[1:]])
@@ -175,7 +175,7 @@ class M1_SBU_Dataset(data.Dataset):
     def __init__(
         self,
         set_paths,
-        select_frames,
+        num_frames,
         stage,
         resize,
         fold_no,
@@ -191,7 +191,7 @@ class M1_SBU_Dataset(data.Dataset):
             zip(*_get_video_metadata(set_paths))
         )
 
-        self.loaded_videos = read_images(self.folders, self.videos_len, select_frames, stage, resize, fold_no, cache_folds, use_cache, folds_cache_path)       
+        self.loaded_videos = read_images(self.folders, self.videos_len, num_frames, stage, resize, fold_no, cache_folds, use_cache, folds_cache_path)       
 
     def __len__(self):
         return len(self.folders)
@@ -210,7 +210,7 @@ class M2_SBU_Dataset(data.Dataset):
     def __init__(
         self,
         set_paths,
-        select_frames,
+        num_frames,
         stage,
         coords_per_keypoint,
         fold_no,
@@ -226,7 +226,7 @@ class M2_SBU_Dataset(data.Dataset):
         )
 
         self.keypoints_per_person = None
-        self.loaded_poses = read_poses(self.folders, self.videos_len, select_frames, stage, fold_no, cache_folds, use_cache, folds_cache_path)
+        self.loaded_poses = read_poses(self.folders, self.videos_len, num_frames, stage, fold_no, cache_folds, use_cache, folds_cache_path)
 
         if coords_per_keypoint == 2:
             idxs = torch.tensor([i for i in range(90) if (i + 1) % 3 != 0])
@@ -259,7 +259,7 @@ class M3_SBU_Dataset(data.Dataset):
     def __init__(
         self,
         set_paths,
-        select_frames,
+        num_frames,
         stage,
         coords_per_keypoint,
         fold_no,
@@ -275,7 +275,7 @@ class M3_SBU_Dataset(data.Dataset):
         )
 
         self.keypoints_per_person = None
-        self.loaded_poses = read_poses(self.folders, self.videos_len, select_frames, stage, fold_no, cache_folds, use_cache, folds_cache_path)
+        self.loaded_poses = read_poses(self.folders, self.videos_len, num_frames, stage, fold_no, cache_folds, use_cache, folds_cache_path)
 
         if coords_per_keypoint == 2:
             idxs = torch.tensor([i for i in range(90) if (i + 1) % 3 != 0])
@@ -307,7 +307,7 @@ class M4_SBU_Dataset(data.Dataset):
     def __init__(
         self,
         set_paths,
-        select_frames,
+        num_frames,
         stage,
         resize,
         coords_per_keypoint,
@@ -325,8 +325,8 @@ class M4_SBU_Dataset(data.Dataset):
 
         self.keypoints_per_person = None
 
-        self.loaded_videos = read_images(self.folders, self.videos_len, select_frames, stage, resize, fold_no, cache_folds, use_cache, folds_cache_path)       
-        self.loaded_poses = read_poses(self.folders, self.videos_len, select_frames, stage, fold_no, cache_folds, use_cache, folds_cache_path)
+        self.loaded_videos = read_images(self.folders, self.videos_len, num_frames, stage, resize, fold_no, cache_folds, use_cache, folds_cache_path)       
+        self.loaded_poses = read_poses(self.folders, self.videos_len, num_frames, stage, fold_no, cache_folds, use_cache, folds_cache_path)
 
         if coords_per_keypoint == 2:
             idxs = torch.tensor([i for i in range(90) if (i + 1) % 3 != 0])

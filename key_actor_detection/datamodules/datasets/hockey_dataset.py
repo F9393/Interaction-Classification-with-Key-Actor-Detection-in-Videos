@@ -70,7 +70,7 @@ class PoseReader():
         for penalty_dir in self.X_dirs:
             self.poses = np.zeros((self.num_frames, self.max_players, self.num_keypoints*self.coords_per_keypoint), dtype='float32')
             self.mask =  np.ones((self.num_frames, self.max_players, self.num_keypoints*self.coords_per_keypoint), dtype='float32')
-            with open(os.path.join(penalty_dir, 'skeleton.json'), "r") as f:
+            with open(os.path.join(penalty_dir, f'{os.path.basename(penalty_dir)}.json'), "r") as f:
                 tmp_poses = json.loads(f.read(), object_pairs_hook=OrderedDict)
                 for frame_no in range(self.num_frames):
                     frame_poses = tmp_poses[frame_no]

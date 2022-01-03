@@ -149,7 +149,7 @@ class SBUDataModule(pl.LightningDataModule):
         if self.CFG.training.model == "model1":
             self.train_dataset = M1_SBU_Dataset(
                 reqd_train_set_paths,
-                self.CFG["training"]["select_frames"],
+                self.CFG["training"]["num_frames"],
                 "train",
                 self.CFG["model1"]["resize"],
                 fold_no,
@@ -157,7 +157,7 @@ class SBUDataModule(pl.LightningDataModule):
             )
             self.val_dataset = M1_SBU_Dataset(
                 reqd_val_set_paths,
-                self.CFG["training"]["select_frames"],
+                self.CFG["training"]["num_frames"],
                 "val",
                 self.CFG["model1"]["resize"],
                 fold_no,
@@ -166,7 +166,7 @@ class SBUDataModule(pl.LightningDataModule):
         elif self.CFG.training.model == "model2":
             self.train_dataset = M2_SBU_Dataset(
                 reqd_train_set_paths,
-                self.CFG["training"]["select_frames"],
+                self.CFG["training"]["num_frames"],
                 "train",
                 self.CFG["model2"].coords_per_keypoint,
                 fold_no,
@@ -174,7 +174,7 @@ class SBUDataModule(pl.LightningDataModule):
             )
             self.val_dataset = M2_SBU_Dataset(
                 reqd_val_set_paths,
-                self.CFG["training"]["select_frames"],
+                self.CFG["training"]["num_frames"],
                 "val",
                 self.CFG["model2"].coords_per_keypoint,
                 fold_no,
@@ -183,7 +183,7 @@ class SBUDataModule(pl.LightningDataModule):
         elif self.CFG.training.model == "model3":
             self.train_dataset = M3_SBU_Dataset(
                 reqd_train_set_paths,
-                self.CFG["training"]["select_frames"],
+                self.CFG["training"]["num_frames"],
                 "train",
                 self.CFG["model3"].coords_per_keypoint,
                 fold_no,
@@ -191,7 +191,7 @@ class SBUDataModule(pl.LightningDataModule):
             )
             self.val_dataset = M3_SBU_Dataset(
                 reqd_val_set_paths,
-                self.CFG["training"]["select_frames"],
+                self.CFG["training"]["num_frames"],
                 "val",
                 self.CFG["model3"].coords_per_keypoint,
                 fold_no,
@@ -200,7 +200,7 @@ class SBUDataModule(pl.LightningDataModule):
         elif self.CFG.training.model == "model4":
             self.train_dataset = M4_SBU_Dataset(
                 reqd_train_set_paths,
-                self.CFG["training"]["select_frames"],
+                self.CFG["training"]["num_frames"],
                 "train",
                 self.CFG["model4"]["resize"],
                 self.CFG["model4"].coords_per_keypoint,
@@ -209,7 +209,7 @@ class SBUDataModule(pl.LightningDataModule):
             )
             self.val_dataset = M4_SBU_Dataset(
                 reqd_val_set_paths,
-                self.CFG["training"]["select_frames"],
+                self.CFG["training"]["num_frames"],
                 "val",
                 self.CFG["model4"]["resize"],
                 self.CFG["model4"].coords_per_keypoint,
