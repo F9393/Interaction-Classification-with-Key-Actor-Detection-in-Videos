@@ -44,8 +44,13 @@ class KeyActorDetection(pl.LightningModule):
         *inps, y = batch
         y = y.view(-1,)
         out = self.model(*inps)
+        y_pred = torch.argmax(out, axis=1)
         loss = F.cross_entropy(out, y)
-        self.log("train_loss",loss,sync_dist=True,rank_zero_only=True)
+        accuracy = self.accuracy(y_pred, y)
+        print("train accuracy")
+        print(accuracy)
+        self.log("train_loss",loss, sync_dist=True,rank_zero_only=True)
+        # self.log('train_acc_step', accuracy, logger=False)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -54,7 +59,9 @@ class KeyActorDetection(pl.LightningModule):
         out = self.model(*inps)
         loss = F.cross_entropy(out, y).item()
         y_pred = torch.argmax(out, axis=1)
-        
+        # accuracy = torchmetrics.functional.accuracy(y_pred, y)
+        # print("val accurcy")
+        # print(accuracy)
         #accuracy of rank 0 process (logs called only on rank 0) . Call to self.accuracy() needed to accumulate batch metrics.
         self.log("val_loss_epoch", loss, logger=True, on_step=False, on_epoch=True, sync_dist=True, rank_zero_only=True)
         self.log('val_acc_step', self.accuracy(y_pred, y), logger=False)
@@ -63,12 +70,18 @@ class KeyActorDetection(pl.LightningModule):
         *inps, y = batch
         y = y.view(-1, )
         out = self.model(*inps)
-        loss = F.cross_entropy(out, y).item()
+        # loss = F.cross_entropy(out, y).item()
         y_pred = torch.argmax(out, axis=1)
 
         # accuracy of rank 0 process (logs called only on rank 0) . Call to self.accuracy() needed to accumulate batch metrics.
-        self.log("test_loss_epoch", loss, logger=True, on_step=True, on_epoch=False, sync_dist=True, rank_zero_only=True)
+        # self.log("test_loss_epoch", loss, logger=True, on_step=True, on_epoch=False, sync_dist=True, rank_zero_only=True)
         self.log('test_acc_step', self.accuracy(y_pred, y), logger=False)
+
+    # def train_epoch_end(self, val_step_outputs):
+    #     self.log('train_acc_epoch', self.accuracy.compute(), logger=False, prog_bar=True)
+    #     self.logger.log_metrics({"trin_acc_epoch": self.accuracy.compute().item()}, step = self.trainer.current_epoch)
+    #     self.best_val_acc = max(self.best_val_acc, self.accuracy.compute().item())
+    #     self.accuracy.reset()
 
     def validation_epoch_end(self, val_step_outputs):
         self.log('val_acc_epoch', self.accuracy.compute(), logger=False, prog_bar=True)
@@ -77,7 +90,9 @@ class KeyActorDetection(pl.LightningModule):
         self.accuracy.reset()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.model._get_parameters(), lr=self.CFG.training.learning_rate)
+        #optimizer = torch.optim.Adam(self.model._get_parameters(), lr=self.CFG.training.learning_rate)
+        #optimizer = torch.optim.SGD(self.model._get_parameters(), lr=self.CFG.training.learning_rate, momentum=0.1)
+        optimizer = torch.optim.ASGD(self.model._get_parameters(), lr=self.CFG.training.learning_rate, weight_decay= self.CFG.training.wd)
         return optimizer
         
 
@@ -120,7 +135,7 @@ def train(CFG):
                 weights_summary='top',
                 log_every_n_steps=4,
                 deterministic=CFG.deterministic.set,
-                accelerator = "ddp" if CFG.gpus is not None and len(CFG.gpus)>1 else None,
+                accelerator = "ddp" if CFG.gpus is not None and len(CFG.gpus)>1 else "gpu",
             )
 
             trainer.fit(model,dm)
@@ -128,8 +143,7 @@ def train(CFG):
             results.append(model.best_val_acc)
 
             print("test_result")
-            print(trainer.test(model=model,
-                               ckpt_path="best",
+            print(trainer.test(ckpt_path="best",
                          dataloaders=dm,))
 
 

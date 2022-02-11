@@ -7,17 +7,24 @@ import os
 import json
 from pytorch_lightning import loggers as pl_loggers
 
-num_trials = 50
+num_trials = 100
 
 # parameters to be optimized
 opt_parameters = [
     {
         "name": "training.learning_rate",
         "type": "choice",
-        "values": [1e-5,1e-4,1e-3,1e-2],
+        "values": [5e-5,1e-4,5e-4,1e-3,5e-3,1e-2],
         "value_type": "float",  # Optional, defaults to inference from type of "bounds".
         "log_scale": False,  # Optional, defaults to False.
     },
+    {
+            "name": "training.wd",
+            "type": "range",
+            "bounds": [1e-8,1],
+            "value_type": "float",  # Optional, defaults to inference from type of "bounds".
+            "log_scale": False,  # Optional, defaults to False.
+        },
     # {
     #     "name": "model1.frameLSTM.hidden_size",
     #     "type": "choice",
@@ -26,33 +33,27 @@ opt_parameters = [
     #     "log_scale": False,  # Optional, defaults to False.
     # },
     {
-        "name": "model2.eventLSTM.hidden_size",
+        "name": "model3.eventLSTM.hidden_size",
         "type": "choice",
-        "values": [64,128,256,512],
+        "values": [256,512],
         "value_type": "int",  # Optional, defaults to inference from type of "bounds".
         "log_scale": False,  # Optional, defaults to False.
     },
-    # {
-    #     "name": "model3.attention_type",
-    #     "type": "choice",
-    #     "values": [1,2],
-    #     "value_type": "int",  # Optional, defaults to inference from type of "bounds".
-    #     "log_scale": False,  # Optional, defaults to False.
-    # },
-    # {
-    #     "name": "model3.attention_params.hidden_size",
-    #     "type": "choice",
-    #     "values": [64,256,512],
-    #     "value_type": "int",  # Optional, defaults to inference from type of "bounds".
-    #     "log_scale": False,  # Optional, defaults to False.
-    # },
-    # {
-    #     "name": "model3.attention_params.bias",
-    #     "type": "choice",
-    #     "values": ['true', 'false'],
-    #     "value_type": "bool",  # Optional, defaults to inference from type of "bounds".
-    #     "log_scale": False,  # Optional, defaults to False.
-    # },
+    {
+        "name": "model3.attention_type",
+        "type": "choice",
+        "values": [1,2],
+        "value_type": "int",  # Optional, defaults to inference from type of "bounds".
+        "log_scale": False,  # Optional, defaults to False.
+    },
+    {
+        "name": "model3.attention_params.hidden_size",
+        "type": "choice",
+        "values": [256,512],
+        "value_type": "int",  # Optional, defaults to inference from type of "bounds".
+        "log_scale": False,  # Optional, defaults to False.
+    },
+
 ]
 
 def map_params_to_arg_list(params):
