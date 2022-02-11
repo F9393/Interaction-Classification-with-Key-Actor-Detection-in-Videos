@@ -18,3 +18,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+#model3: BEST PARAMETERS : {'training.learning_rate': 0.0001, 'model3.eventLSTM.hidden_size': 512, 'model3.attention_type': 2, 'model3.attention_params.hidden_size': 64}
+#model3: BEST PARAMETERS : {'training.learning_rate': 0.001, 'model3.eventLSTM.hidden_size': 512, 'model3.attention_type': 2, 'model3.attention_params.hidden_size': 256, 'model3.attention_params.bias': True}

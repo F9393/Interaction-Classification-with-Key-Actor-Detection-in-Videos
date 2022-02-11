@@ -20,7 +20,7 @@ class FrameReader():
         self.stage = stage
         self.num_frames = num_frames
 
-        if stage == "train" or stage == "val":
+        if stage == "train" or stage == "val" or stage == "test":
             self.transform = transforms.Compose(
                 [
                     transforms.Resize([resize, resize]),

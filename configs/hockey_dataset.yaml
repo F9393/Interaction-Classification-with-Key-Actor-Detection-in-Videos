@@ -1,26 +1,30 @@
 dataset_name: "Hockey"
-dataset_path: "/usr/local/data01/rohitram/hockey_dataset"
+dataset_path: "/home/fay/Desktop/Key-Actor-Detection/hockey_dataset"
 
 num_nodes: 1 # number of nodes
 gpus: [0] # list of gpu indices on each node
-  
+
 training:    
   train_dataloader:
     batch_size: 16
     num_workers: 4
-    shuffle: true
+    shuffle: True
   val_dataloader:
+    batch_size: 16
+    num_workers: 4
+    shuffle: false
+  test_dataloader:
     batch_size: 16
     num_workers: 4
     shuffle: false
   num_frames: 64  
   max_players: 15
-  num_epochs: 50
-  learning_rate: 0.002
-  save_dir: "./mlruns" #null for no saving
+  num_epochs: 150
+  learning_rate: 0.001
+  save_dir: "/home/fay/Desktop/Key-Actor-Detection/work_dir/model3eax" #null for no saving
   folds: [1] # choose from 1,2,3,4,5
   num_runs: 1 # each fold will be run these many times
-  model: "model3"
+  model: "model2"
 
 deterministic:
   set: true
@@ -53,10 +57,13 @@ model3:
   num_keypoints: 20 
   coords_per_keypoint: 2
   eventLSTM:  
-    hidden_size: 128 
+    hidden_size: 512
     winit: "default"
     forget_gate_bias: "default"
   attention_type: 2
+  attention_params:
+    hidden_size: 64
+    bias: true
 
 model4:
   resize: 224       
@@ -72,6 +79,7 @@ model4:
     hidden_size: 256
     winit: "default"
     forget_gate_bias: "default"
+  attention_type: 3
   attention_params:
     hidden_size: 256
     bias: true

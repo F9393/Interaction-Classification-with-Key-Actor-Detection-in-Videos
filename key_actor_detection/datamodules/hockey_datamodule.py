@@ -21,7 +21,10 @@ class HockeyDataModule(pl.LightningDataModule):
     def setup(self, fold_no=None):  # fold_no should be in [1,2,3,4,5]
         all_video_dirs = glob.glob(os.path.join(self.data_dir, '*', '*'))
         penalty_idxs = [self.CATEGORY_TO_IDX[os.path.basename(Path(x).parents[0])] for x in all_video_dirs]
-        X_train_dirs, X_test_dirs, y_train, y_test = train_test_split(all_video_dirs, penalty_idxs, test_size=0.2, random_state=42, stratify = penalty_idxs)
+        X_tv_dirs, X_test_dirs, y_tv, y_test = train_test_split(all_video_dirs, penalty_idxs, test_size=0.1, random_state=42, stratify=penalty_idxs)
+        X_train_dirs, X_val_dirs, y_train, y_val = train_test_split(X_tv_dirs, y_tv, test_size=0.18, random_state=42, stratify = y_tv)
+
+
 
         if self.CFG.training.model == "model1":
             self.train_dataset = M1_HockeyDataset(
@@ -31,9 +34,15 @@ class HockeyDataModule(pl.LightningDataModule):
                 self.CFG["training"].num_frames,
             )
             self.val_dataset = M1_HockeyDataset(
-                (X_test_dirs, y_test),
+                (X_val_dirs, y_val),
                 self.CFG["model1"].resize,
                 "val",
+                self.CFG["training"].num_frames,
+            )
+            self.test_dataset = M1_HockeyDataset(
+                (X_test_dirs, y_test),
+                self.CFG["model1"].resize,
+                "test",
                 self.CFG["training"].num_frames,
             )
         elif self.CFG.training.model == "model2":
@@ -46,8 +55,16 @@ class HockeyDataModule(pl.LightningDataModule):
                 self.CFG["model2"].coords_per_keypoint,
             )
             self.val_dataset = M2_HockeyDataset(
-                (X_test_dirs, y_test),
+                (X_val_dirs, y_val),
                 "val",
+                self.CFG["training"].num_frames,
+                self.CFG["training"].max_players,
+                self.CFG["model2"].num_keypoints,
+                self.CFG["model2"].coords_per_keypoint,
+            )
+            self.test_dataset = M2_HockeyDataset(
+                (X_test_dirs, y_test),
+                "test",
                 self.CFG["training"].num_frames,
                 self.CFG["training"].max_players,
                 self.CFG["model2"].num_keypoints,
@@ -63,13 +80,21 @@ class HockeyDataModule(pl.LightningDataModule):
                 self.CFG["model3"].coords_per_keypoint,
             )
             self.val_dataset = M3_HockeyDataset(
-                (X_test_dirs, y_test),
+                (X_val_dirs, y_val),
                 "val",
                 self.CFG["training"].num_frames,
                 self.CFG["training"].max_players,
                 self.CFG["model3"].num_keypoints,
                 self.CFG["model3"].coords_per_keypoint,
-            ) 
+            )
+            self.test_dataset = M3_HockeyDataset(
+                (X_test_dirs, y_test),
+                "test",
+                self.CFG["training"].num_frames,
+                self.CFG["training"].max_players,
+                self.CFG["model3"].num_keypoints,
+                self.CFG["model3"].coords_per_keypoint,
+            )
         elif self.CFG.training.model == "model4":
             self.train_dataset = M4_HockeyDataset(
                 (X_train_dirs, y_train),
@@ -81,9 +106,18 @@ class HockeyDataModule(pl.LightningDataModule):
                 self.CFG["model4"].coords_per_keypoint,
             )
             self.val_dataset = M4_HockeyDataset(
-                (X_test_dirs, y_test),
+                (X_val_dirs, y_val),
                 self.CFG["model4"].resize,
                 "val",
+                self.CFG["training"].num_frames,
+                self.CFG["training"].max_players,
+                self.CFG["model4"].num_keypoints,
+                self.CFG["model4"].coords_per_keypoint,
+            )
+            self.test_dataset = M4_HockeyDataset(
+                (X_test_dirs, y_test),
+                self.CFG["model4"].resize,
+                "test",
                 self.CFG["training"].num_frames,
                 self.CFG["training"].max_players,
                 self.CFG["model4"].num_keypoints,
@@ -98,12 +132,15 @@ class HockeyDataModule(pl.LightningDataModule):
     def val_dataloader(self):
         return DataLoader(self.val_dataset, **self.CFG.training.val_dataloader)
 
+    def test_dataloader(self):
+        return DataLoader(self.test_dataset, **self.CFG.training.test_dataloader)
+
     def teardown(self,stage):
         import gc
-        del self.train_dataset.loaded_videos
-        del self.val_dataset.loaded_videos
-        del self.train_dataset.folders
-        del self.val_dataset.folders
+        # del self.train_dataset.loaded_videos
+        # del self.val_dataset.loaded_videos
+        # del self.train_dataset.folders
+        # del self.val_dataset.folders
         gc.collect()
 
 
@@ -112,7 +149,7 @@ if __name__ == "__main__":
 
     CFG = OmegaConf.load("configs/hockey_dataset.yaml")
 
-    CFG.dataset_path = '/usr/local/data01/rohitram/hockey_dataset'
+    CFG.dataset_path = '/usr/local/data01/faskari/Key-Actor-Detection/hockey_dataset'
     print("\nModel 1 Test")
     CFG.training.model = "model1"
     dm = HockeyDataModule(CFG)

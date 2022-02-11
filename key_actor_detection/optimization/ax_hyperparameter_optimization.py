@@ -4,39 +4,55 @@ from key_actor_detection.train import train
 import sys
 import torch
 import os
+import json
+from pytorch_lightning import loggers as pl_loggers
 
-num_trials = 10
+num_trials = 50
 
 # parameters to be optimized
 opt_parameters = [
     {
         "name": "training.learning_rate",
-        "type": "range",
-        "bounds": [1e-6,1e-2],
+        "type": "choice",
+        "values": [1e-5,1e-4,1e-3,1e-2],
         "value_type": "float",  # Optional, defaults to inference from type of "bounds".
         "log_scale": False,  # Optional, defaults to False.
     },
+    # {
+    #     "name": "model1.frameLSTM.hidden_size",
+    #     "type": "choice",
+    #     "values": [128, 256, 512],
+    #     "value_type": "int",  # Optional, defaults to inference from type of "bounds".
+    #     "log_scale": False,  # Optional, defaults to False.
+    # },
     {
-        "name": "model4.eventLSTM.hidden_size",
-        "type": "range",
-        "bounds": [128,256],
+        "name": "model2.eventLSTM.hidden_size",
+        "type": "choice",
+        "values": [64,128,256,512],
         "value_type": "int",  # Optional, defaults to inference from type of "bounds".
         "log_scale": False,  # Optional, defaults to False.
     },
-    {
-        "name": "model4.frameLSTM.hidden_size",
-        "type": "range",
-        "bounds": [128,256],
-        "value_type": "int",  # Optional, defaults to inference from type of "bounds".
-        "log_scale": False,  # Optional, defaults to False.
-    },
-    {
-        "name": "model4.attention_params.hidden_size",
-        "type": "range",
-        "bounds": [16,512],
-        "value_type": "int",  # Optional, defaults to inference from type of "bounds".
-        "log_scale": False,  # Optional, defaults to False.
-    },
+    # {
+    #     "name": "model3.attention_type",
+    #     "type": "choice",
+    #     "values": [1,2],
+    #     "value_type": "int",  # Optional, defaults to inference from type of "bounds".
+    #     "log_scale": False,  # Optional, defaults to False.
+    # },
+    # {
+    #     "name": "model3.attention_params.hidden_size",
+    #     "type": "choice",
+    #     "values": [64,256,512],
+    #     "value_type": "int",  # Optional, defaults to inference from type of "bounds".
+    #     "log_scale": False,  # Optional, defaults to False.
+    # },
+    # {
+    #     "name": "model3.attention_params.bias",
+    #     "type": "choice",
+    #     "values": ['true', 'false'],
+    #     "value_type": "bool",  # Optional, defaults to inference from type of "bounds".
+    #     "log_scale": False,  # Optional, defaults to False.
+    # },
 ]
 
 def map_params_to_arg_list(params):
@@ -66,18 +82,18 @@ if __name__ == "__main__":
     cli_cfg = OmegaConf.from_cli(sys.argv[2:])
     CFG = OmegaConf.merge(CFG, cli_cfg)
 
-    ax_client = AxClient(random_seed=42, verbose_logging=False)
-    ax_client2 = AxClient(random_seed=42, verbose_logging=False)
+    ax_client = AxClient( verbose_logging=False)
+    ax_client2 = AxClient(verbose_logging=False)
 
     ax_client.create_experiment(
-        name="sbu-model4",
+        name="hockey-model4",
         parameters=opt_parameters,
         objective_name="do_train",
         minimize=False
     )
 
     ax_client2.create_experiment(
-        name="sbu-model4_2",
+        name="hockey-model4_2",
         parameters=opt_parameters,
         objective_name="do_train",
         minimize=False
@@ -87,9 +103,14 @@ if __name__ == "__main__":
     if os.getenv("SLURM_PROCID","0") == "0":
         for i in range(num_trials):
             curr_params, trial_index = ax_client.get_next_trial()
+            print(f'CURRENT PARAMETERS : {curr_params}')
             ax_client.complete_trial(trial_index=trial_index, raw_data=do_train(CFG, curr_params))
         best_parameters, values = ax_client.get_best_parameters()
         print(f'BEST PARAMETERS : {best_parameters}')
+        with open(os.path.join(CFG.training.save_dir, 'best_parames.json'), 'w') as outfile:
+            json.dump(best_parameters, outfile)
+
+        #CFG.training.save_dir
     else:
         for i in range(num_trials):
             if loop_count==0:

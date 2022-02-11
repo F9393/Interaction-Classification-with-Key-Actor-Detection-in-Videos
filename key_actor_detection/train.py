@@ -59,6 +59,17 @@ class KeyActorDetection(pl.LightningModule):
         self.log("val_loss_epoch", loss, logger=True, on_step=False, on_epoch=True, sync_dist=True, rank_zero_only=True)
         self.log('val_acc_step', self.accuracy(y_pred, y), logger=False)
 
+    def test_step(self, batch, batch_idx):
+        *inps, y = batch
+        y = y.view(-1, )
+        out = self.model(*inps)
+        loss = F.cross_entropy(out, y).item()
+        y_pred = torch.argmax(out, axis=1)
+
+        # accuracy of rank 0 process (logs called only on rank 0) . Call to self.accuracy() needed to accumulate batch metrics.
+        self.log("test_loss_epoch", loss, logger=True, on_step=True, on_epoch=False, sync_dist=True, rank_zero_only=True)
+        self.log('test_acc_step', self.accuracy(y_pred, y), logger=False)
+
     def validation_epoch_end(self, val_step_outputs):
         self.log('val_acc_epoch', self.accuracy.compute(), logger=False, prog_bar=True)
         self.logger.log_metrics({"val_acc_epoch": self.accuracy.compute().item()}, step = self.trainer.current_epoch)
@@ -115,5 +126,14 @@ def train(CFG):
             trainer.fit(model,dm)
 
             results.append(model.best_val_acc)
+
+            print("test_result")
+            print(trainer.test(model=model,
+                               ckpt_path="best",
+                         dataloaders=dm,))
+
+
+
+            #apply the test here
 
     return np.mean(results), np.std(results)
