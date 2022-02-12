@@ -30,7 +30,10 @@ class KeyActorDetection(pl.LightningModule):
         else:
             raise ValueError(f'model "{CFG.training.model}" does not exist! Must be one of "model1", "model2", "model2", "model4"')
             
-        self.accuracy = torchmetrics.Accuracy()
+        self.train_accuracy = torchmetrics.Accuracy()
+        self.val_accuracy = torchmetrics.Accuracy()
+        self.test_accuracy = torchmetrics.Accuracy()
+
         self.best_val_acc = -1
 
     def forward(self, x):
@@ -45,8 +48,17 @@ class KeyActorDetection(pl.LightningModule):
         y = y.view(-1,)
         out = self.model(*inps)
         loss = F.cross_entropy(out, y)
+        y_pred = torch.argmax(out, axis=1)
+
         self.log("train_loss",loss,sync_dist=True,rank_zero_only=True)
+        self.log('train_acc_step', self.train_accuracy(y_pred, y), logger=False)
         return loss
+
+    def training_epoch_end(self, train_step_outputs):
+        self.log('train_acc_epoch',  self.train_accuracy.compute(), logger=False, prog_bar=True)
+        self.logger.log_metrics({"train_acc_epoch":  self.train_accuracy.compute().item()}, step = self.trainer.current_epoch)
+        self.best_val_acc = max(self.best_val_acc,  self.train_accuracy.compute().item())
+        self.train_accuracy.reset()
 
     def validation_step(self, batch, batch_idx):
         *inps, y = batch
@@ -57,7 +69,17 @@ class KeyActorDetection(pl.LightningModule):
         
         #accuracy of rank 0 process (logs called only on rank 0) . Call to self.accuracy() needed to accumulate batch metrics.
         self.log("val_loss_epoch", loss, logger=True, on_step=False, on_epoch=True, sync_dist=True, rank_zero_only=True)
-        self.log('val_acc_step', self.accuracy(y_pred, y), logger=False)
+        self.log('val_acc_step', self.val_accuracy(y_pred, y), logger=False)
+
+    def validation_epoch_end(self, val_step_outputs):
+        self.log('val_acc_epoch', self.val_accuracy.compute(), logger=False, prog_bar=True)
+        self.logger.log_metrics({"val_acc_epoch": self.val_accuracy.compute().item()}, step = self.trainer.current_epoch)
+        self.best_val_acc = max(self.best_val_acc, self.val_accuracy.compute().item())
+        self.val_accuracy.reset()
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.model._get_parameters(), lr=self.CFG.training.learning_rate)
+        return optimizer
 
     def test_step(self, batch, batch_idx):
         *inps, y = batch
@@ -68,18 +90,12 @@ class KeyActorDetection(pl.LightningModule):
 
         # accuracy of rank 0 process (logs called only on rank 0) . Call to self.accuracy() needed to accumulate batch metrics.
         self.log("test_loss_epoch", loss, logger=True, on_step=True, on_epoch=False, sync_dist=True, rank_zero_only=True)
-        self.log('test_acc_step', self.accuracy(y_pred, y), logger=False)
+        self.log('test_acc_step', self.test_accuracy(y_pred, y), logger=False)
 
-    def validation_epoch_end(self, val_step_outputs):
-        self.log('val_acc_epoch', self.accuracy.compute(), logger=False, prog_bar=True)
-        self.logger.log_metrics({"val_acc_epoch": self.accuracy.compute().item()}, step = self.trainer.current_epoch)
-        self.best_val_acc = max(self.best_val_acc, self.accuracy.compute().item())
-        self.accuracy.reset()
-
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.model._get_parameters(), lr=self.CFG.training.learning_rate)
-        return optimizer
-        
+    def test_epoch_end(self, test_step_outputs):
+        self.log('test_acc_epoch', self.test_accuracy.compute(), logger=False, prog_bar=True)
+        self.logger.log_metrics({"test_acc_epoch": self.test_accuracy.compute().item()}, step = self.trainer.current_epoch)
+        self.test_accuracy.reset()
 
 def train(CFG):
     for fold_no in CFG.training.folds:
@@ -131,9 +147,5 @@ def train(CFG):
             print(trainer.test(model=model,
                                ckpt_path="best",
                          dataloaders=dm,))
-
-
-
-            #apply the test here
 
     return np.mean(results), np.std(results)
