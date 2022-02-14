@@ -4,17 +4,20 @@ import os
 import os.path as osp
 from os import listdir, makedirs
 from os.path import isdir, join
+import statistics
+
 import warnings
 import shutil
 import sys
 import argparse
 import re
+import numpy as np
 
 #set all confidences to one
 
-annotations_path = "./"
-body_dir = 'CLEANED_BODY'
-SERIES = [5]
+annotations_path = "./hockey_dataset"
+# body_dir = 'CLEANED_BODY'
+SERIES = ["Tripping", "Slashing", "No_penalty"]
 #
 # def atoi(text):
 #     return int(text) if text.isdigit() else text
@@ -65,22 +68,94 @@ def AddZero(cleaned_body_clip_dir_paths):
         ) as fo:
             json.dump(body, fo, indent=4)
 
+def head_mapping(org_json):
+
+    keys = set(org_json[0].keys())
+    keys.remove('frameNum')
+    all_players = list(keys)
+    new_json = {}
+    for frame in org_json:
+        print(frame)
+        for key in all_players:
+            org_pose = frame[key]
+            head_points = org_pose[0:3]
+            head_points = head_points + org_pose[42:54]
+            body = org_pose[3:42] + org_pose[54:]
+            nose = head_points[0:2]
+            reye = head_points[3:5]
+            leye = head_points[6:8]
+            rear = head_points[9:11]
+            lear = head_points[12:14]
+            body_list = [nose, reye, leye, rear, lear]
+
+            count = 0
+            count_o = 0
+            zero_count = 0
+            x = 0
+            y = 0
+            # print(body_list)
+            x_ave = body[0:-6:3]
+            x_mean = statistics.mean(x_ave)
+            y_ve = body[1:-5:3]
+            y_mean = statistics.mean(y_ve)
+            for parts in body_list:
+                if any(parts):
+                    diff_x = abs(parts[0] - (x_mean))
+                    diff_y = abs(parts[1] - (y_mean))
+                    if diff_x + diff_y > 200:
+                        # print("outlier")
+                        count_o = count_o + 1
+                        pass
+                    else:
+                        count = count + 1
+                        x = x + parts[0]
+                        y = y + parts[1]
+                else:
+                    zero_count = zero_count + 1
+
+            if zero_count == 5 or count_o + zero_count == 5:
+                new_key_point = [0.0, 0.0, 1.0]
+            else:
+                if count == 0:
+                    print("error")
+                else:
+                    new_key_point_x = x / count
+                    new_key_point_y = y / count
+                    new_key_point = [new_key_point_x, new_key_point_y, 1.0]
+            # print(new_key_point)
+            # print("done")
+            org_pose[0:3] = new_key_point
+            org_pose[42:54] = new_key_point * 4
+            frame[key] = org_pose
+        print("done")
+
+    return org_json
 
 if __name__ == "__main__":
 
+    new_json = {}
     for series_no in SERIES:
-        for cat in os.listdir(osp.join(annotations_path, f'series_{series_no}')):
-            cleaned_body_dir = osp.join(annotations_path, f'series_{series_no}', cat, 'CLEANED_BODY')
-            output_dir = osp.join(annotations_path, f'series_{series_no}', cat, 'CLEANED_BODY')
+        for video in os.listdir(osp.join(annotations_path, series_no)):
+            with open(osp.join(annotations_path, series_no, video, video + ".json"), 'r') as f:
+                print(osp.join(annotations_path, series_no, video, video + ".json"))
+                org_json = json.load(f)
+                new_body_json = head_mapping(org_json)
 
-            if isdir(cleaned_body_dir):
-                cleaned_body_clip_names = os.listdir(cleaned_body_dir)
-            else:
-                raise Exception("Filtered Poses must contain some clips!")
+                with open(
+                        join(
+                            annotations_path, series_no,
+                            video,
+                            "mapped" + video + ".json",
+                        ),
+                        "w",
+                ) as fo:
+                    json.dump(new_body_json, fo, indent=4)
+                #all frames padded
 
-            cleaned_body_clip_dir_paths = [osp.join(cleaned_body_dir, x) for x in
-                                           cleaned_body_clip_names]  # e.g 'hockey_dataset/series_1/No_penalty/CLEANED_BODY/_2017-11-16-wsh-col-home570'
 
-            AddZero(cleaned_body_clip_dir_paths)
+
+            # output_dir = osp.join(annotations_path, f'series_{series_no}', cat, 'CLEANED_BODY')
+
+            # AddZero(cleaned_body_clip_dir_paths)
 
     # out_file.close()
