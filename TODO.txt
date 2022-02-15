@@ -1,0 +1,240 @@
+Note:
+
+Done:
+
+****
+
+    can stick to oen gpu with four tasks per gpu! Results are the same with different number of tasks. 
+
+    Mode3 runs 6 mins with 4 tasks on cedar.  
+
+    how long the model4 take on v100 cedar gpu? 26899987
+
+        -memory can be fixed at 8 GB
+        -model4 time need to be doubled (3hrs min)
+        -model4 32 batch can be run on v100l gpu 
+
+    test with batch size 16 on cedar normal gpu ==> testing on 16g gpu p100l with batch 32 on 2gpu scripts
+        sbatch: error: The P100 GPUs with 16GB of memory (p100l) are only allocated by node.
+        sbatch: error: Please request a whole node using --gpus-per-node:p100l:4.
+        
+    test with smaller batch size on normal gpu: 26900487: failed
+        submitted another one with 2 task per node and same batch size (16) failed
+        another one with 1 task batch size 16 per gpu 26905233. Work? didn't work!
+        
+    *****conclude: model4/1 runs on v100l with max batch size of 32, 4 task/node, need 8 G memory and at least 3 hrs for 100 epochs. Model2,3 run in 6 mins on normal gpus! 
+    
+****
+
+    Logging metrics and loss confirmed and correct 
+    
+
+
+
+Todo:
+    
+-get ax optimzer running on cc too
+4-increase hidden size
+0-program scheduler and early stopping
+-choice the wd
+-augmentation
+-normalization
+-other baselines
+
+1-pose correcting zero keypoits
+2-mapping head keypoints
+    -setting condition for missing players so all videos included
+2.5view poses
+6-walk trhough the code
+3-update codes on machines with code and new test procedure
+5-set some runs for tomorrow on servers and compute canada
+
+
+Notes:
+
++Best parameter from ax on puck model 3, 100 epochs: 
+BEST PARAMETERS : {'training.wd': 0.6753641995468647, 'training.learning_rate': 0.001, 'model3.eventLSTM.hidden_size': 512, 'model3.attention_type': 2, 'model3.attention_params.hidden_size': 512}
+    -increase hidden size
+    -program scheduler
+    -choice the wd
+    -augmentation
+    -normalization
+    -pose correcting
+    
++model4 with 61% test accuracy 150 epochs:
+{'training.learning_rate': 1e-05, 'model4.frameLSTM.hidden_size': 512, 'model4.eventLSTM.hidden_size': 512, 'model4.attention_type': 1, 'model4.attention_params.hidden_s
+ize': 512, 'model4.attention_params.bias': True}
+
+
++Both obeservations asking for high dimension of hidden states
+
+
++loss in the progress bar is moving average the train loss is at the end of epoch
+
+*******correct training loop****************************************************************************************************************************************************************
+
+import numpy as np
+
+import torch
+import torch.nn.functional as F
+import torchmetrics
+
+from .datamodules.sbu_datamodule import SBUDataModule
+from .datamodules.hockey_datamodule import HockeyDataModule
+
+import pytorch_lightning as pl
+from pytorch_lightning import Trainer, seed_everything
+from pytorch_lightning import loggers as pl_loggers
+from pytorch_lightning.callbacks import ModelCheckpoint
+
+from .models.models import Model1, Model2, Model3, Model4
+
+class KeyActorDetection(pl.LightningModule):
+    def __init__(self, CFG):
+        super(KeyActorDetection, self).__init__()
+
+        self.CFG = CFG
+        if CFG.training.model == 'model1':
+            self.model = Model1(**CFG.model1)
+        elif CFG.training.model == 'model2':
+            self.model = Model2(**CFG.model2)
+        elif CFG.training.model == 'model3':
+            self.model = Model3(**CFG.model3)
+        elif CFG.training.model == 'model4':
+            self.model = Model4(**CFG.model4)
+        else:
+            raise ValueError(f'model "{CFG.training.model}" does not exist! Must be one of "model1", "model2", "model2", "model4"')
+            
+        self.train_accuracy = torchmetrics.Accuracy()
+        self.val_accuracy = torchmetrics.Accuracy()
+        self.test_accuracy = torchmetrics.Accuracy()
+
+        self.best_val_acc = -1
+
+    def forward(self, x):
+        out = self.model(x)
+        return out
+    
+    def on_train_start(self):
+        self.logger.log_hyperparams(self.CFG)
+
+    def training_step(self, batch, batch_idx):
+
+        *inps, y = batch
+        y = y.view(-1, )
+        out = self.model(*inps)
+        loss = F.cross_entropy(out, y)
+        y_pred = torch.argmax(out, axis=1)
+        self.train_accuracy(y_pred, y)
+
+        self.log("train_loss", loss, sync_dist=True, rank_zero_only=True, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        self.log('train_acc', self.train_accuracy, on_step=True, on_epoch=True, logger=False)
+        return loss
+
+    def training_epoch_end(self, train_step_outputs):
+
+        self.log('train_epoch_accuracy', self.train_accuracy, logger=False, prog_bar=True)
+        # self.logger.log_metrics({"train_acc_epoch": self.train_accuracy},
+        #                         step=self.trainer.current_epoch)
+
+    def validation_step(self, batch, batch_idx):
+
+        *inps, y = batch
+        y = y.view(-1, )
+        out = self.model(*inps)
+        loss = F.cross_entropy(out, y).item()
+        y_pred = torch.argmax(out, axis=1)
+        self.val_accuracy(y_pred, y)
+
+        self.log('val_acc', self.val_accuracy, on_step=False, on_epoch=True, logger=False)
+        # accuracy of rank 0 process (logs called only on rank 0) . Call to self.accuracy() needed to accumulate batch metrics.
+        self.log("val_loss_epoch", loss, logger=True, on_step=False, on_epoch=True, sync_dist=True, rank_zero_only=True)
+
+    def validation_epoch_end(self, val_step_outputs):
+
+        self.log('val_acc_epoch', self.val_accuracy, logger=False, prog_bar=True)
+        #self.logger.log_metrics({"val_acc_epoch": self.val_accuracy}, step=self.trainer.current_epoch)
+        #self.best_val_acc = max(self.best_val_acc, self.val_accuracy.item())
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.ASGD(self.model._get_parameters(), lr=self.CFG.training.learning_rate)
+        return optimizer
+
+    def test_step(self, batch, batch_idx):
+
+        *inps, y = batch
+        y = y.view(-1, )
+        out = self.model(*inps)
+        loss = F.cross_entropy(out, y).item()
+        y_pred = torch.argmax(out, axis=1)
+        self.test_accuracy(y_pred, y)
+
+        self.log('test_acc', self.test_accuracy, on_step=True, on_epoch=True, logger=False)
+        # accuracy of rank 0 process (logs called only on rank 0) . Call to self.accuracy() needed to accumulate batch metrics.
+        self.log("test_loss_epoch", loss, logger=True, on_step=True, on_epoch=False, sync_dist=True,
+                 rank_zero_only=True)
+
+    def test_epoch_end(self, test_step_outputs):
+
+        self.log('test_acc_epoch', self.test_accuracy, logger=False, prog_bar=True)
+        # self.logger.log_metrics({"test_acc_epoch": self.test_accuracy},
+        #                         step=self.trainer.current_epoch)
+
+def train(CFG):
+    for fold_no in CFG.training.folds:
+        # once PL version 1.6 releases, we can shift below 2 statements outside the for loop (currently dm.setup() is called only once)
+        if CFG.dataset_name == "SBU":
+            dm = SBUDataModule(CFG)
+        elif CFG.dataset_name == "Hockey":
+            dm = HockeyDataModule(CFG)
+        else:
+            raise Exception("Invalid dataset! Must be one of 'SBU' or 'Hockey'")
+        dm.prepare_data()
+        dm.setup(fold_no = fold_no)
+        results = []
+
+        for run_no in range(1,CFG.training.num_runs+1):
+            if CFG.deterministic.set:
+                seed_everything(CFG.deterministic.seed, workers=True)
+
+            model = KeyActorDetection(CFG)
+
+            mlf_logger = pl_loggers.mlflow.MLFlowLogger(experiment_name=CFG.training.model, run_name = f'fold={fold_no},run={run_no}', save_dir=CFG.training.save_dir)
+            checkpoint_callback = ModelCheckpoint(dirpath=None,
+                                                monitor='val_acc_epoch',
+                                                save_top_k=1 if CFG.training.save_dir else 0,
+                                                save_last=True if CFG.training.save_dir else False,
+                                                save_weights_only=True,
+                                                filename='{epoch:02d}-{val_acc_epoch:.4f}',
+                                                verbose=False,
+                                                mode='max')
+        
+            trainer = Trainer(
+                max_epochs=CFG.training.num_epochs,
+                num_nodes=CFG.num_nodes,
+                gpus=CFG.gpus,
+                precision=32,
+                callbacks=[checkpoint_callback],
+                logger = mlf_logger,
+                weights_summary='top',
+                log_every_n_steps=4,
+                deterministic=CFG.deterministic.set,
+                accelerator = "ddp" if CFG.gpus is not None and len(CFG.gpus)>1 else None,
+            )
+
+            trainer.fit(model,dm)
+
+            results.append(model.best_val_acc)
+
+            print("test_result")
+            print(trainer.test(model=model,
+                               ckpt_path="best",
+                         dataloaders=dm,))
+
+    return np.mean(results), np.std(results)
+
+
+
+*******correct training loop****************************************************************************************************************************************************************
+
+
