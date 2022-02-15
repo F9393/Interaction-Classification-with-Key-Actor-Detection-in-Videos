@@ -86,7 +86,12 @@ class KeyActorDetection(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.ASGD(self.model._get_parameters(), lr=self.CFG.training.learning_rate)
+
         return optimizer
+
+        # return [optimizer], [{"scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer),
+        #                      "mode": max, "monitor": "val_acc", "factor": 0.1, "patience": 20, "threshold": 0.00,
+        #                      # "verbose": True}]
 
     def test_step(self, batch, batch_idx):
 
@@ -139,7 +144,7 @@ def train(CFG):
                                                   filename='{epoch:02d}-{val_acc_epoch:.4f}',
                                                   verbose=False,
                                                   mode='max')
-            
+
             earlystop_callback = EarlyStopping(monitor="val_acc", mode="max", min_delta=0.00, patience=20)
 
             trainer = Trainer(
