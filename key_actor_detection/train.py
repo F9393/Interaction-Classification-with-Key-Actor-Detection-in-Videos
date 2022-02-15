@@ -14,6 +14,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 from .models.models import Model1, Model2, Model3, Model4
 
+
 class KeyActorDetection(pl.LightningModule):
     def __init__(self, CFG):
         super(KeyActorDetection, self).__init__()
@@ -28,73 +29,85 @@ class KeyActorDetection(pl.LightningModule):
         elif CFG.training.model == 'model4':
             self.model = Model4(**CFG.model4)
         else:
-            raise ValueError(f'model "{CFG.training.model}" does not exist! Must be one of "model1", "model2", "model2", "model4"')
-            
-        self.accuracy = torchmetrics.Accuracy()
+            raise ValueError(
+                f'model "{CFG.training.model}" does not exist! Must be one of "model1", "model2", "model2", "model4"')
+
+        self.train_accuracy = torchmetrics.Accuracy()
+        self.val_accuracy = torchmetrics.Accuracy()
+        self.test_accuracy = torchmetrics.Accuracy()
+
         self.best_val_acc = -1
 
     def forward(self, x):
         out = self.model(x)
         return out
-    
+
     def on_train_start(self):
         self.logger.log_hyperparams(self.CFG)
 
     def training_step(self, batch, batch_idx):
-        *inps, y = batch
-        y = y.view(-1,)
-        out = self.model(*inps)
-        y_pred = torch.argmax(out, axis=1)
-        loss = F.cross_entropy(out, y)
-        accuracy = self.accuracy(y_pred, y)
-        print("train accuracy")
-        print(accuracy)
-        self.log("train_loss",loss, sync_dist=True,rank_zero_only=True)
-        # self.log('train_acc_step', accuracy, logger=False)
-        return loss
 
-    def validation_step(self, batch, batch_idx):
-        *inps, y = batch
-        y = y.view(-1,)
-        out = self.model(*inps)
-        loss = F.cross_entropy(out, y).item()
-        y_pred = torch.argmax(out, axis=1)
-        # accuracy = torchmetrics.functional.accuracy(y_pred, y)
-        # print("val accurcy")
-        # print(accuracy)
-        #accuracy of rank 0 process (logs called only on rank 0) . Call to self.accuracy() needed to accumulate batch metrics.
-        self.log("val_loss_epoch", loss, logger=True, on_step=False, on_epoch=True, sync_dist=True, rank_zero_only=True)
-        self.log('val_acc_step', self.accuracy(y_pred, y), logger=False)
-
-    def test_step(self, batch, batch_idx):
         *inps, y = batch
         y = y.view(-1, )
         out = self.model(*inps)
-        # loss = F.cross_entropy(out, y).item()
+        loss = F.cross_entropy(out, y)
         y_pred = torch.argmax(out, axis=1)
+        self.train_accuracy(y_pred, y)
 
+        self.log("train_loss", loss, sync_dist=False, rank_zero_only=True, on_step=True, on_epoch=True, prog_bar=True,
+                 logger=True)
+        self.log('train_acc', self.train_accuracy, on_step=True, on_epoch=True, logger=False)
+        return loss
+
+    def training_epoch_end(self, train_step_outputs):
+
+        self.log('train_epoch_accuracy', self.train_accuracy, logger=False, prog_bar=True)
+        # self.logger.log_metrics({"train_acc_epoch": self.train_accuracy},
+        #                         step=self.trainer.current_epoch)
+
+    def validation_step(self, batch, batch_idx):
+
+        *inps, y = batch
+        y = y.view(-1, )
+        out = self.model(*inps)
+        loss = F.cross_entropy(out, y).item()
+        y_pred = torch.argmax(out, axis=1)
+        self.val_accuracy(y_pred, y)
+
+        self.log('val_acc', self.val_accuracy, on_step=False, on_epoch=True, logger=False)
         # accuracy of rank 0 process (logs called only on rank 0) . Call to self.accuracy() needed to accumulate batch metrics.
-        # self.log("test_loss_epoch", loss, logger=True, on_step=True, on_epoch=False, sync_dist=True, rank_zero_only=True)
-        self.log('test_acc_step', self.accuracy(y_pred, y), logger=False)
-
-    # def train_epoch_end(self, val_step_outputs):
-    #     self.log('train_acc_epoch', self.accuracy.compute(), logger=False, prog_bar=True)
-    #     self.logger.log_metrics({"trin_acc_epoch": self.accuracy.compute().item()}, step = self.trainer.current_epoch)
-    #     self.best_val_acc = max(self.best_val_acc, self.accuracy.compute().item())
-    #     self.accuracy.reset()
+        self.log("val_loss_epoch", loss, logger=True, on_step=False, on_epoch=True, sync_dist=False, rank_zero_only=True)
 
     def validation_epoch_end(self, val_step_outputs):
-        self.log('val_acc_epoch', self.accuracy.compute(), logger=False, prog_bar=True)
-        self.logger.log_metrics({"val_acc_epoch": self.accuracy.compute().item()}, step = self.trainer.current_epoch)
-        self.best_val_acc = max(self.best_val_acc, self.accuracy.compute().item())
-        self.accuracy.reset()
+
+        self.log('val_acc_epoch', self.val_accuracy, logger=False, prog_bar=True)
+        # self.logger.log_metrics({"val_acc_epoch": self.val_accuracy}, step=self.trainer.current_epoch)
+        # self.best_val_acc = max(self.best_val_acc, self.val_accuracy.item())
 
     def configure_optimizers(self):
-        #optimizer = torch.optim.Adam(self.model._get_parameters(), lr=self.CFG.training.learning_rate)
-        #optimizer = torch.optim.SGD(self.model._get_parameters(), lr=self.CFG.training.learning_rate, momentum=0.1)
-        optimizer = torch.optim.ASGD(self.model._get_parameters(), lr=self.CFG.training.learning_rate, weight_decay= self.CFG.training.wd)
+        optimizer = torch.optim.ASGD(self.model._get_parameters(), lr=self.CFG.training.learning_rate)
         return optimizer
-        
+
+    def test_step(self, batch, batch_idx):
+
+        *inps, y = batch
+        y = y.view(-1, )
+        out = self.model(*inps)
+        loss = F.cross_entropy(out, y).item()
+        y_pred = torch.argmax(out, axis=1)
+        self.test_accuracy(y_pred, y)
+
+        self.log('test_acc', self.test_accuracy, on_step=True, on_epoch=True, logger=False)
+        # accuracy of rank 0 process (logs called only on rank 0) . Call to self.accuracy() needed to accumulate batch metrics.
+        self.log("test_loss_epoch", loss, logger=True, on_step=True, on_epoch=False, sync_dist=False,
+                 rank_zero_only=True)
+
+    def test_epoch_end(self, test_step_outputs):
+
+        self.log('test_acc_epoch', self.test_accuracy, logger=False, prog_bar=True)
+        # self.logger.log_metrics({"test_acc_epoch": self.test_accuracy},
+        #                         step=self.trainer.current_epoch)
+
 
 def train(CFG):
     for fold_no in CFG.training.folds:
@@ -106,48 +119,47 @@ def train(CFG):
         else:
             raise Exception("Invalid dataset! Must be one of 'SBU' or 'Hockey'")
         dm.prepare_data()
-        dm.setup(fold_no = fold_no)
+        dm.setup(fold_no=fold_no)
         results = []
 
-        for run_no in range(1,CFG.training.num_runs+1):
+        for run_no in range(1, CFG.training.num_runs + 1):
             if CFG.deterministic.set:
                 seed_everything(CFG.deterministic.seed, workers=True)
 
             model = KeyActorDetection(CFG)
 
-            mlf_logger = pl_loggers.mlflow.MLFlowLogger(experiment_name=CFG.training.model, run_name = f'fold={fold_no},run={run_no}', save_dir=CFG.training.save_dir)
+            mlf_logger = pl_loggers.mlflow.MLFlowLogger(experiment_name=CFG.training.model,
+                                                        run_name=f'fold={fold_no},run={run_no}',
+                                                        save_dir=CFG.training.save_dir)
             checkpoint_callback = ModelCheckpoint(dirpath=None,
-                                                monitor='val_acc_epoch',
-                                                save_top_k=1 if CFG.training.save_dir else 0,
-                                                save_last=True if CFG.training.save_dir else False,
-                                                save_weights_only=True,
-                                                filename='{epoch:02d}-{val_acc_epoch:.4f}',
-                                                verbose=False,
-                                                mode='max')
-        
+                                                  monitor='val_acc_epoch',
+                                                  save_top_k=1 if CFG.training.save_dir else 0,
+                                                  save_last=True if CFG.training.save_dir else False,
+                                                  save_weights_only=True,
+                                                  filename='{epoch:02d}-{val_acc_epoch:.4f}',
+                                                  verbose=False,
+                                                  mode='max')
+
             trainer = Trainer(
                 max_epochs=CFG.training.num_epochs,
                 num_nodes=CFG.num_nodes,
                 gpus=CFG.gpus,
                 precision=32,
                 callbacks=[checkpoint_callback],
-                logger = mlf_logger,
+                logger=mlf_logger,
                 weights_summary='top',
                 log_every_n_steps=4,
                 deterministic=CFG.deterministic.set,
-                accelerator = "ddp" if CFG.gpus is not None and len(CFG.gpus)>1 else "gpu",
+                accelerator="ddp" if CFG.gpus is not None and len(CFG.gpus) > 1 else None,
             )
 
-            trainer.fit(model,dm)
+            trainer.fit(model, dm)
 
             results.append(model.best_val_acc)
 
             print("test_result")
-            print(trainer.test(ckpt_path="best",
-                         dataloaders=dm,))
-
-
-
-            #apply the test here
+            print(trainer.test(model=model,
+                               ckpt_path="best",
+                               dataloaders=dm, ))
 
     return np.mean(results), np.std(results)
