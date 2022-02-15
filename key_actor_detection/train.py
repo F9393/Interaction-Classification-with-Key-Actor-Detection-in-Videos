@@ -10,7 +10,7 @@ from .datamodules.hockey_datamodule import HockeyDataModule
 import pytorch_lightning as pl
 from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning import loggers as pl_loggers
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 
 from .models.models import Model1, Model2, Model3, Model4
 
@@ -132,20 +132,22 @@ def train(CFG):
                                                         run_name=f'fold={fold_no},run={run_no}',
                                                         save_dir=CFG.training.save_dir)
             checkpoint_callback = ModelCheckpoint(dirpath=None,
-                                                  monitor='val_acc_epoch',
+                                                  monitor='val_acc',
                                                   save_top_k=1 if CFG.training.save_dir else 0,
                                                   save_last=True if CFG.training.save_dir else False,
                                                   save_weights_only=True,
                                                   filename='{epoch:02d}-{val_acc_epoch:.4f}',
                                                   verbose=False,
                                                   mode='max')
+            
+            earlystop_callback = EarlyStopping(monitor="val_acc", mode="max", min_delta=0.00, patience=20)
 
             trainer = Trainer(
                 max_epochs=CFG.training.num_epochs,
                 num_nodes=CFG.num_nodes,
                 gpus=CFG.gpus,
                 precision=32,
-                callbacks=[checkpoint_callback],
+                callbacks=[checkpoint_callback, earlystop_callback],
                 logger=mlf_logger,
                 weights_summary='top',
                 log_every_n_steps=4,
