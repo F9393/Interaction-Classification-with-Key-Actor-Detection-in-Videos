@@ -90,8 +90,27 @@ belieavu 1: {Ax, model3, search: [lr, wd, patience],
         "log_scale": False,  # Optional, defaults to False.
      },
 
+{'training.learning_rate': 0.001, 'training.wd': 1.0, 'training.patience': 30.0}
+
            
 puck 1: Exactly as above except for attention type 1
+
+{'training.learning_rate': 0.0001, 'training.wd': 0.1, 'training.patience': 40.0}
+
+
+
+
+Cedar model4:
+
+    running with v100 gpy, 16GB and 2.30, batch size 32. hs 512 on new dataset for time estimation (hockey_dataset.yaml, train_slurm_1gpu.sh) 27058068
+    -patience? no
+            
+cedar model1: 
+
+   running with v100 gpy, 8GB and 2.30, batch size 32 on new dataset for time estimation (hockey_dataset_model1.yaml, train_slurm_1gpu_model1.sh) 27058104
+   -patience? no
+ 
+    
 
 
 
@@ -99,21 +118,9 @@ puck 1: Exactly as above except for attention type 1
 
 Notes:
 
-+Best parameter from ax on puck model 3, 100 epochs: 
-BEST PARAMETERS : {'training.wd': 0.6753641995468647, 'training.learning_rate': 0.001, 'model3.eventLSTM.hidden_size': 512, 'model3.attention_type': 2, 'model3.attention_params.hidden_size': 512}
-    -increase hidden size
-    -program scheduler
-    -choice the wd
-    -augmentation
-    -normalization
-    -pose correcting
-    
-+model4 with 61% test accuracy 150 epochs:
-{'training.learning_rate': 1e-05, 'model4.frameLSTM.hidden_size': 512, 'model4.eventLSTM.hidden_size': 512, 'model4.attention_type': 1, 'model4.attention_params.hidden_s
-ize': 512, 'model4.attention_params.bias': True}
++switiching back opt to adam from asgd no wd.
++able to overfit to batch with current implementation of training loop!
 
-
-+Both obeservations asking for high dimension of hidden states
 
 
 +loss in the progress bar is moving average the train loss is at the end of epoch
