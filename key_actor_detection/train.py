@@ -145,7 +145,7 @@ def train(CFG):
                                                   verbose=False,
                                                   mode='max')
 
-            earlystop_callback = EarlyStopping(monitor="val_acc", mode="max", min_delta=0.00, patience=20)
+            earlystop_callback = EarlyStopping(monitor="val_acc", mode="max", min_delta=0.00, patience=CFG.training.patience)
 
             trainer = Trainer(
                 max_epochs=CFG.training.num_epochs,

@@ -60,9 +60,42 @@ Todo:
 3-update codes on machines with code and new test procedure
 5-set some runs for tomorrow on servers and compute canada
 
-personal : cloths, inhalars, allergy pill, milk, tissue, call dad
+##################################################################################################
 
-##################################################################################################3
+Runs:
+
+belieavu 1: {Ax, model3, search: [lr, wd, patience], 
+           hiddensize: 512, init: default, bias: true, 
+           epoch: 75, attention type: 2, batch 32, 16 keypoints, 40 trials]
+           
+           {
+        "name": "training.learning_rate",
+        "type": "choice",
+        "values": [5e-5,1e-4,5e-4,1e-3,5e-3,1e-2,5e-2],
+        "value_type": "float",  # Optional, defaults to inference from type of "bounds".
+        "log_scale": False,  # Optional, defaults to False.
+    },
+    {
+        "name": "training.wd",
+        "type": "choice",
+        "values": [1e-3,1e-2,0.1,0.5,1],
+        "value_type": "float",  # Optional, defaults to inference from type of "bounds".
+        "log_scale": False,  # Optional, defaults to False.
+     },
+    {
+        "name": "training.patience",
+        "type": "choice",
+        "values": [20,30,40],
+        "value_type": "float",  # Optional, defaults to inference from type of "bounds".
+        "log_scale": False,  # Optional, defaults to False.
+     },
+
+           
+puck 1: Exactly as above except for attention type 1
+
+
+
+##################################################################################################
 
 Notes:
 
