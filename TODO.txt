@@ -29,26 +29,40 @@ Done:
     Logging metrics and loss confirmed and correct 
     
 
+*****
 
+    scheduler and early stopping: ES def helping but not the scheduler 
+                                    the patiance in es is important: can be 20 or 30!
+                                    
+*****
+
+    1-pose correcting zero keypoits
+    2-mapping head keypoints
+        -setting condition for missing players so all videos included
+    
+    Now we have 16 keypoints
+
+#################################################################################################
 
 Todo:
     
 -get ax optimzer running on cc too
 4-increase hidden size
-0-program scheduler and early stopping
+
 -choice the wd
 -augmentation
 -normalization
 -other baselines
 
-1-pose correcting zero keypoits
-2-mapping head keypoints
-    -setting condition for missing players so all videos included
-2.5view poses
+
+2.5 view poses
 6-walk trhough the code
 3-update codes on machines with code and new test procedure
 5-set some runs for tomorrow on servers and compute canada
 
+personal : cloths, inhalars, allergy pill, milk, tissue, call dad
+
+##################################################################################################3
 
 Notes:
 

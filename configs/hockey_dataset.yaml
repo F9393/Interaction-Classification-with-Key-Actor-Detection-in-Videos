@@ -19,7 +19,7 @@ training:
     shuffle: false
   num_frames: 64  
   max_players: 15
-  num_epochs: 100
+  num_epochs: 60
   learning_rate: 0.001
   wd : 0.6753
   save_dir: "/home/fay/Desktop/Key-Actor-Detection/work_dir/model3axwd" #null for no saving
@@ -46,7 +46,7 @@ model1:
   
 model2:
   num_classes: 3
-  num_keypoints: 20
+  num_keypoints: 16
   coords_per_keypoint: 2 # always 2
   eventLSTM:  
     hidden_size: 256 
@@ -55,7 +55,7 @@ model2:
 
 model3:
   num_classes: 3
-  num_keypoints: 20 
+  num_keypoints: 16
   coords_per_keypoint: 2
   eventLSTM:  
     hidden_size: 512
@@ -70,7 +70,7 @@ model4:
   resize: 224       
   CNN_embed_dim: 256
   num_classes: 3
-  num_keypoints: 20
+  num_keypoints: 16
   coords_per_keypoint: 2
   frameLSTM:
     hidden_size: 256
