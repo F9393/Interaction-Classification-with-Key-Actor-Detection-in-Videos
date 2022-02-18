@@ -135,7 +135,7 @@ class KeyActorDetection(pl.LightningModule):
 
         self.log('val_acc', self.val_accuracy, on_step=False, on_epoch=True, logger=False)
         # accuracy of rank 0 process (logs called only on rank 0) . Call to self.accuracy() needed to accumulate batch metrics.
-        self.log("val_loss_epoch", loss, logger=True, on_step=False, on_epoch=True, sync_dist=False, rank_zero_only=True)
+        self.log("val_loss_epoch", loss, logger=True, on_step=False, on_epoch=True, sync_dist=False, rank_zero_only=True, prog_bar=True,)
 
     def validation_epoch_end(self, val_step_outputs):
 
@@ -144,7 +144,7 @@ class KeyActorDetection(pl.LightningModule):
         # self.best_val_acc = max(self.best_val_acc, self.val_accuracy.item())
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.model._get_parameters(), lr=self.CFG.training.learning_rate)
+        optimizer = torch.optim.Adam(self.model._get_parameters(), lr=self.CFG.training.learning_rate, weight_decay=self.CFG.training.wd)
 
         return optimizer
 

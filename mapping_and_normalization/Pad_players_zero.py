@@ -154,7 +154,7 @@ def remove_zeros(org_json):
             for b in range(0,54,3):
                 x = org_pose[b]
                 y = org_pose[b+1]
-                if 0 < x < 25 and 0 < y < 25:
+                if 0.0 < x < 35.0 and 0.0 < y < 35.0:
                     print("here")
                     org_pose[b] = 0
                     org_pose[b+1] = 0
