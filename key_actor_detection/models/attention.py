@@ -7,7 +7,7 @@ class Attention1(nn.Module):
     attention for phase 3 model.
     """
 
-    def __init__(self, hidden_size, key_size):
+    def __init__(self, hidden_size, key_size, attention_params):
         """
         hidden-size = size of hidden_dim of eventLSTM
         key_size = size of feature representation of player
@@ -61,7 +61,7 @@ class Attention2(nn.Module):
     attention for phase 3 model.
     """
 
-    def __init__(self, hidden_size, key_size):
+    def __init__(self, hidden_size, key_size, attention_params):
         """
         hidden-size = size of hidden_dim of eventLSTM
         key_size = size of feature representation of player
@@ -70,9 +70,9 @@ class Attention2(nn.Module):
         super(Attention2, self).__init__()
         
         self.mlp = nn.Sequential(
-            nn.Linear(key_size + hidden_size, 64, bias=False),
+            nn.Linear(key_size + hidden_size, attention_params['hidden_size'], bias=attention_params['bias']),
             nn.ReLU(),
-            nn.Linear(64,1,bias=False)
+            nn.Linear(attention_params['hidden_size'],1,bias=attention_params['bias'])
         )
         
     def forward(self, query, keys, mask = None):

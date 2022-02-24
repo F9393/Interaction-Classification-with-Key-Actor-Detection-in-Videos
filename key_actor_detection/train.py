@@ -217,6 +217,7 @@ def train(CFG):
                 log_every_n_steps=4,
                 deterministic=CFG.deterministic.set,
                 accelerator="ddp" if CFG.gpus is not None and len(CFG.gpus) > 1 else None,
+                # limit_train_batches=1, limit_val_batches=1
             )
 
             trainer.fit(model, dm)

@@ -104,6 +104,7 @@ class Model2(nn.Module):
 
         out = self.fc(e_out)
 
+        #getting the last step
         return out[:, -1, :]
 
     def _get_parameters(self):
@@ -111,7 +112,7 @@ class Model2(nn.Module):
 
 
 class Model3(nn.Module):
-    def __init__(self, eventLSTM, num_keypoints, coords_per_keypoint, num_classes, attention_type, **kwargs):
+    def __init__(self, eventLSTM, num_keypoints, coords_per_keypoint, num_classes, attention_type, attention_params, **kwargs):
         """
         Parameters
         ----------
@@ -135,7 +136,7 @@ class Model3(nn.Module):
         if attention_type == 1:
             self.attention = Attention1(self.hidden_size, pose_dim)
         elif attention_type == 2:
-            self.attention = Attention2(self.hidden_size, pose_dim)
+            self.attention = Attention2(self.hidden_size, pose_dim, attention_params,)
         else:
             raise Exception("invalid attention type! Must be either 1 or 2.")
 

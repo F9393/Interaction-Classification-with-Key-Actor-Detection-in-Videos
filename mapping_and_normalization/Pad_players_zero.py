@@ -5,6 +5,9 @@ import os.path as osp
 from os import listdir, makedirs
 from os.path import isdir, join
 import statistics
+import matplotlib.pyplot as plt
+import numpy as np
+from collections import Counter
 
 import warnings
 import shutil
@@ -15,7 +18,7 @@ import numpy as np
 
 #set all confidences to one
 
-annotations_path = "./hockey_dataset"
+annotations_path = "/home/fay/Desktop/Key-Actor-Detection/hockey_dataset"
 # body_dir = 'CLEANED_BODY'
 SERIES = ["Tripping", "Slashing", "No_penalty"]
 #
@@ -76,7 +79,7 @@ def head_mapping(org_json):
     new_json = {}
 
     for frame in org_json:
-        print(frame)
+        # print(frame)
         for key in all_players:
             org_pose = frame[key]
             head_points = org_pose[0:3]
@@ -90,25 +93,12 @@ def head_mapping(org_json):
             body_list = [nose, reye, leye, rear, lear]
 
             count = 0
-            count_o = 0
             zero_count = 0
             x = 0
             y = 0
-            # print(body_list)
-            # x_ave = body[0:-6:3]
-            # x_mean = statistics.mean(x_ave)
-            # y_ve = body[1:-5:3]
-            # y_mean = statistics.mean(y_ve)
 
             for parts in body_list:
                 if any(parts):
-                    # diff_x = abs(parts[0] - (x_mean))
-                    # diff_y = abs(parts[1] - (y_mean))
-                    # if diff_x + diff_y > 200:
-                    #     # print("outlier")
-                    #     count_o = count_o + 1
-                    #     pass
-                    # else:
                     count = count + 1
                     x = x + parts[0]
                     y = y + parts[1]
@@ -128,12 +118,19 @@ def head_mapping(org_json):
             # print(new_key_point)
             # print("done")
             org_pose = new_key_point + body
-            # org_pose[0:3] = new_key_point
-            # org_pose[42:54] = new_key_point * 4
             frame[key] = org_pose
-        print("done")
+        #print("done")
 
     return org_json
+
+def get_stats(video, org_json, list_num_players):
+
+    num_players = len(org_json[0]) - 1
+    if num_players == 8:
+        print(video)
+    list_num_players.append((num_players))
+
+    return list_num_players
 
 def remove_zeros(org_json):
 
@@ -145,34 +142,36 @@ def remove_zeros(org_json):
     pad = [0.0,0.0,1.0] * 20
 
     for frame in org_json:
-        print(frame)
+        # print(frame)
         for key in all_players:
             if key not in frame.keys():
                 frame[key] = pad
             org_pose = frame[key]
-            print(org_pose)
+            # print(org_pose)
             for b in range(0,54,3):
                 x = org_pose[b]
                 y = org_pose[b+1]
-                if 0.0 < x < 35.0 and 0.0 < y < 35.0:
-                    print("here")
+                if 0.0 <= x < 50.0 and 0.0 <= y < 50.0:
+                    # print("here")
                     org_pose[b] = 0
                     org_pose[b+1] = 0
-            print(org_pose)
-            print("player done")
+            # print(org_pose)
+            #print("player done")
 
     return org_json
 
 if __name__ == "__main__":
 
     new_json = {}
+    list_num_players = []
     for series_no in SERIES:
         for video in os.listdir(osp.join(annotations_path, series_no)):
             with open(osp.join(annotations_path, series_no, video, video + ".json"), 'r') as f:
-                print(osp.join(annotations_path, series_no, video, video + ".json"))
+                # print(osp.join(annotations_path, series_no, video, video + ".json"))
                 org_json = json.load(f)
                 zero_remove_json = remove_zeros(org_json)
                 new_body_json = head_mapping(zero_remove_json)
+                out = get_stats(video, new_body_json, list_num_players)
 
                 with open(
                         join(
@@ -184,6 +183,17 @@ if __name__ == "__main__":
                 ) as fo:
                     json.dump(new_body_json, fo, indent=4)
                 #all frames padded
+
+    C = Counter(list_num_players)
+    print(C)
+    weights = np.ones_like(list_num_players) / len(list_num_players)
+    plt.hist(list_num_players, weights=weights, bins=15)  # density=False would make counts
+    plt.ylabel('count')
+    plt.xlabel('Number of Players')
+    plt.show()
+
+
+
 
 
 

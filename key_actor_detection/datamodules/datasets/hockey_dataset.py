@@ -72,13 +72,18 @@ class PoseReader():
             self.mask =  np.ones((self.num_frames, self.max_players, self.num_keypoints*self.coords_per_keypoint), dtype='float32')
             with open(os.path.join(penalty_dir, f'{os.path.basename(penalty_dir)}.json'), "r") as f:
                 tmp_poses = json.loads(f.read(), object_pairs_hook=OrderedDict)
+                # print(penalty_dir)
                 for frame_no in range(self.num_frames):
+                    # print(frame_no)
                     frame_poses = tmp_poses[frame_no]
                     for player_no,player_pose in frame_poses.items():
+                        # print(player_no)
                         if player_no.startswith("p"):
                             del player_pose[2::3]     
                             self.poses[frame_no, int(player_no[1:]), :] = player_pose
                             self.mask[frame_no, int(player_no[1:]), :] = 0 # if mask=0, means do not mask these values
+                self.poses = np.delete(self.poses, obj=0, axis=1)
+                self.mask = np.delete(self.mask, obj=0, axis=1)
                 poses_and_masks[penalty_dir] = (self.poses, self.mask)    
         return poses_and_masks        
 
