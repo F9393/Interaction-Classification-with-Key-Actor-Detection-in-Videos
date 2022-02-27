@@ -14,11 +14,14 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
 
         resnet = models.resnet152(pretrained=True)
-        modules = list(resnet.children())[:-1]      # delete the last fc layer.
+        modules = list(resnet.children())[:-1]
+        # resnet = models.vgg16(pretrained=True)
+        # modules = list(resnet.children())[:-1]
+             # delete the last fc layer.
         self.resnet = nn.Sequential(*modules)
         self.resnet.eval() ## use pretrained calculated running_stats
-
         self.embedding_layer = nn.Linear(resnet.fc.in_features, CNN_embed_dim)
+        # self.embedding_layer = nn.Linear(25088, CNN_embed_dim)
 
         # initialize embedding layer
         # nn.init.constant_(self.embedding_layer.bias, 0.0)

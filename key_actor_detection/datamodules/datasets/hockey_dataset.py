@@ -84,7 +84,17 @@ class PoseReader():
                             self.mask[frame_no, int(player_no[1:]), :] = 0 # if mask=0, means do not mask these values
                 self.poses = np.delete(self.poses, obj=0, axis=1)
                 self.mask = np.delete(self.mask, obj=0, axis=1)
-                poses_and_masks[penalty_dir] = (self.poses, self.mask)    
+                poses_and_masks[penalty_dir] = (self.poses, self.mask)
+
+        if self.stage == 'test':
+
+            new_dict_test = {}
+            for key, val in poses_and_masks.items():
+                pose_list = val[0].tolist()
+                new_dict_test[key] = pose_list
+            with open("/home/fay/Desktop/Key-Actor-Detection/work_dir/test_stage.json", "w") as f:
+                json.dump(new_dict_test, f, indent=4)
+
         return poses_and_masks        
 
 class M1_HockeyDataset(data.Dataset):

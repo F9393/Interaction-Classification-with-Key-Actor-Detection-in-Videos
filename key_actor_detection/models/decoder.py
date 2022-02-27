@@ -88,9 +88,9 @@ class EventLSTM(nn.Module):
         self.eventLSTM = nn.LSTM(
             input_size = self.input_size, 
             hidden_size = self.hidden_size,        
-            num_layers = 1,       
+            num_layers = 1,
             batch_first = True,     
-            bidirectional = False
+            bidirectional = False,
         )
 
         for layer in self.eventLSTM._all_weights:

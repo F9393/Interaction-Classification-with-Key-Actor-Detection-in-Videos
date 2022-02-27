@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -84,6 +85,8 @@ class Attention2(nn.Module):
         """
         
         # [B,1,H] -> [B,P,H]
+        #this line added for hidden instead of out
+        # query = torch.transpose(query.unsqueeze(0), 1,0)
         repeat_query = query.repeat(1,keys.size(1),1)
 
         # cat([B,P,K],[B,P,H]) -> [B,P,K+H]
@@ -98,7 +101,8 @@ class Attention2(nn.Module):
 
         # Turn scores to probabilities.
         # [B,P] -> [B,P]
-        weights = F.softmax(raw_weights, dim=1)   
+        weights = F.softmax(raw_weights, dim=1)
+        # print(weights)
 
         # The context vector is the weighted sum of the values.
         # [B,P] -> [B,1,P]

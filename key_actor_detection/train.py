@@ -1,5 +1,6 @@
 import numpy as np
-
+import json
+import os
 import torch
 import torch.nn.functional as F
 import torchmetrics
@@ -108,7 +109,7 @@ class KeyActorDetection(pl.LightningModule):
 
         *inps, y = batch
         y = y.view(-1, )
-        out = self.model(*inps)
+        out, weights = self.model(*inps)
         loss = F.cross_entropy(out, y)
         y_pred = torch.argmax(out, axis=1)
         self.train_accuracy(y_pred, y)
@@ -128,7 +129,7 @@ class KeyActorDetection(pl.LightningModule):
 
         *inps, y = batch
         y = y.view(-1, )
-        out = self.model(*inps)
+        out, weights = self.model(*inps)
         loss = F.cross_entropy(out, y).item()
         y_pred = torch.argmax(out, axis=1)
         self.val_accuracy(y_pred, y)
@@ -149,14 +150,14 @@ class KeyActorDetection(pl.LightningModule):
         return optimizer
 
         # return [optimizer], [{"scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer),
-        #                      "mode": max, "monitor": "val_acc", "factor": 0.1, "patience": 20, "threshold": 0.00,
-        #                      # "verbose": True}]
+        #                      "mode": max, "monitor": "val_acc", "factor": 0.5, "patience": 50, "threshold": 0.00,
+        #                       "verbose": True}]
 
     def test_step(self, batch, batch_idx):
 
         *inps, y = batch
         y = y.view(-1, )
-        out = self.model(*inps)
+        out, weights = self.model(*inps)
         loss = F.cross_entropy(out, y).item()
         y_pred = torch.argmax(out, axis=1)
         self.test_accuracy(y_pred, y)
@@ -165,6 +166,17 @@ class KeyActorDetection(pl.LightningModule):
         # accuracy of rank 0 process (logs called only on rank 0) . Call to self.accuracy() needed to accumulate batch metrics.
         self.log("test_loss_epoch", loss, logger=True, on_step=True, on_epoch=False, sync_dist=False,
                  rank_zero_only=True)
+
+        for sample_data in (range(out.shape[0])):
+            save_dict ={}
+            weight = weights[:,sample_data,:].tolist()
+            output = out[sample_data,:].tolist()
+            input = inps[0][sample_data,:,:,:].tolist()
+            save_dict["weight"] = weight
+            save_dict["output"] = output
+            save_dict["input"] = input
+            with open(os.path.join("/home/fay/Desktop/Key-Actor-Detection/work_dir/weights", str(batch_idx), str(sample_data) + ".json"), "w") as fo:
+                json.dump(save_dict, fo, indent=4)
 
     def test_epoch_end(self, test_step_outputs):
 
@@ -199,7 +211,7 @@ def train(CFG):
                                                   monitor='val_acc',
                                                   save_top_k=1 if CFG.training.save_dir else 0,
                                                   save_last=True if CFG.training.save_dir else False,
-                                                  save_weights_only=True,
+                                                  save_weights_only=False,
                                                   filename='{epoch:02d}-{val_acc_epoch:.4f}',
                                                   verbose=False,
                                                   mode='max')
@@ -217,7 +229,7 @@ def train(CFG):
                 log_every_n_steps=4,
                 deterministic=CFG.deterministic.set,
                 accelerator="ddp" if CFG.gpus is not None and len(CFG.gpus) > 1 else None,
-                # limit_train_batches=1, limit_val_batches=1
+
             )
 
             trainer.fit(model, dm)

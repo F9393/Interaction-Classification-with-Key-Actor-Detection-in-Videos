@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from .encoder import Encoder
 from .decoder import FrameLSTM, EventLSTM
 from .attention import Attention1, Attention2, Attention3
+import numpy as np
 
 
 class Model1(nn.Module):
@@ -141,6 +142,15 @@ class Model3(nn.Module):
             raise Exception("invalid attention type! Must be either 1 or 2.")
 
         self.eventLSTM = EventLSTM(input_size=pose_dim, **eventLSTM)
+
+        # self.bn = nn.BatchNorm1d(1)
+
+
+        # self.fc = nn.Sequential(
+        #     nn.Linear(in_features=eventLSTM["hidden_size"], out_features=eventLSTM["hidden_size"]),
+        #     nn.ReLU(),
+        #     nn.Linear(in_features=eventLSTM["hidden_size"], out_features=num_classes),
+        # )
         self.fc = nn.Linear(
             in_features=eventLSTM["hidden_size"], out_features=num_classes
         )
@@ -157,18 +167,24 @@ class Model3(nn.Module):
         hidden = torch.zeros(1, x.size(0), self.hidden_size).to(device)
         cell = torch.zeros(1, x.size(0), self.hidden_size).to(device)
 
+        # out = torch.zeros(x.size(0), 1, self.hidden_size).to(device)
+        # hidden = torch.zeros(2, x.size(0), self.hidden_size).to(device)
+        # cell = torch.zeros(2, x.size(0), self.hidden_size).to(device)
+        att_weights = torch.zeros(x.size(1),x.size(0),x.size(2)).to(device)
         for t in range(x.size(1)):
             if mask is not None:
                 curr_frame_mask = mask[:,t,:,0]
             else:
                 curr_frame_mask = None
-            embeddings, _ = self.attention(out, x[:, t, :, :], curr_frame_mask) # in the mask, all keypoints of a valid player will be set to 0. So, one flag for a player is enough instead of one flag for every keypoint of the player.
+            # embeddings, self.weights = self.attention(hidden[-1,:,:], x[:, t, :, :], curr_frame_mask)
+            embeddings, self.weights = self.attention(out, x[:, t, :, :], curr_frame_mask)# in the mask, all keypoints of a valid player will be set to 0. So, one flag for a player is enough instead of one flag for every keypoint of the player.
             out, (hidden, cell) = self.eventLSTM(embeddings, (hidden, cell))
+            att_weights[t,:,:] = self.weights
 
         # [B,1,H] -> [B,1,O]
         out = self.fc(out)
 
-        return out[:, -1, :]
+        return out[:, -1, :], att_weights
 
     def _get_parameters(self):
         return list(self.parameters())
@@ -227,8 +243,16 @@ class Model4(nn.Module):
             frameLSTM["hidden_size"],
             attention_params,
         )
-        self.fc = nn.Linear(
-            in_features=eventLSTM["hidden_size"], out_features=num_classes
+        # self.fc = nn.Linear(
+        #     in_features=eventLSTM["hidden_size"], out_features=num_classes
+        # )
+
+        self.fc = nn.Sequential(
+            nn.Linear(in_features=eventLSTM["hidden_size"], out_features=eventLSTM["hidden_size"]),
+            nn.ReLU(),
+            nn.Linear(in_features=eventLSTM["hidden_size"], out_features=256),
+            nn.ReLU(),
+            nn.Linear(in_features=256, out_features=num_classes),
         )
 
         self.eventLSTM_h_dim = eventLSTM["hidden_size"]
