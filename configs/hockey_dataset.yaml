@@ -1,5 +1,5 @@
 dataset_name: "Hockey"
-dataset_path: "/home/fay/Desktop/Key-Actor-Detection/hockey_dataset"
+dataset_path: "path to dataset"
 
 num_nodes: 1 # number of nodes
 gpus: [0] # list of gpu indices on each node
@@ -7,26 +7,26 @@ gpus: [0] # list of gpu indices on each node
 training:    
   train_dataloader:
     batch_size: 32
-    num_workers: 4
+    num_workers: 0
     shuffle: True
   val_dataloader:
     batch_size: 32
-    num_workers: 4
+    num_workers: 0
     shuffle: false
   test_dataloader:
     batch_size: 32
-    num_workers: 4
+    num_workers: 0
     shuffle: false
-  num_frames: 64  
+  num_frames: 64
   max_players: 8
-  num_epochs: 100
-  learning_rate: 0.0001
-  wd : 0
+  num_epochs: 250
+  learning_rate: 0.00005
+  wd : 0.00001
   patience : 100
-  save_dir: "/home/fay/Desktop/Key-Actor-Detection/work_dir/model3axwd" #null for no saving
+  save_dir: "path to save_dir" #null for no saving
   folds: [1] # choose from 1,2,3,4,5
   num_runs: 1 # each fold will be run these many times
-  model: "model2"
+  model: "model4"
 
 deterministic:
   set: true
@@ -56,7 +56,7 @@ model2:
 
 model3:
   num_classes: 3
-  num_keypoints: 16
+  num_keypoints: 14
   coords_per_keypoint: 2
   eventLSTM:  
     hidden_size: 512
@@ -69,19 +69,19 @@ model3:
 
 model4:
   resize: 224       
-  CNN_embed_dim: 256
+  CNN_embed_dim: 512
   num_classes: 3
-  num_keypoints: 16
+  num_keypoints: 14
   coords_per_keypoint: 2
   frameLSTM:
-    hidden_size: 256
+    hidden_size: 512
     winit: "default"
     forget_gate_bias: "default"
   eventLSTM:  
-    hidden_size: 256
+    hidden_size: 512
     winit: "default"
     forget_gate_bias: "default"
   attention_type: 3
   attention_params:
-    hidden_size: 256
+    hidden_size: 512
     bias: true

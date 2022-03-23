@@ -1,5 +1,5 @@
 dataset_name: "SBU"
-dataset_path: "/usr/local/data02/dpdataset/sbu"
+dataset_path: "path to dataset"
 
 num_nodes: 1 # number of nodes
 gpus: [0] # list of gpu indices on each node
@@ -21,7 +21,7 @@ training:
   num_frames: 10   
   num_epochs: 200
   learning_rate: 0.002
-  save_dir: "./mlruns" #null for no saving
+  save_dir: "path to save_dir" #null for no saving
   folds: [1] # choose from 1,2,3,4,5
   num_runs: 1 # each fold will be run these many times
   model: "model4"

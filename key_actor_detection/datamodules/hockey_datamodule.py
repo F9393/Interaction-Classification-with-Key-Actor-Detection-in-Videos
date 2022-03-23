@@ -5,7 +5,13 @@ import glob
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 
-from .datasets.hockey_dataset import M1_HockeyDataset, M2_HockeyDataset, M3_HockeyDataset, M4_HockeyDataset
+from .datasets.hockey_dataset import (
+    M1_HockeyDataset,
+    M2_HockeyDataset,
+    M3_HockeyDataset,
+    M4_HockeyDataset,
+)
+
 
 class HockeyDataModule(pl.LightningDataModule):
     def __init__(self, CFG):
@@ -13,18 +19,27 @@ class HockeyDataModule(pl.LightningDataModule):
         self.CFG = CFG
         self.data_dir = CFG.dataset_path
 
-        self.CATEGORY_TO_IDX = {"No_penalty":0, "Slashing":1, "Tripping":2}
+        self.CATEGORY_TO_IDX = {"No_penalty": 0, "Slashing": 1, "Tripping": 2}
 
     def prepare_data(self):
         pass
 
     def setup(self, fold_no=None):  # fold_no should be in [1,2,3,4,5]
-        all_video_dirs = glob.glob(os.path.join(self.data_dir, '*', '*'))
-        penalty_idxs = [self.CATEGORY_TO_IDX[os.path.basename(Path(x).parents[0])] for x in all_video_dirs]
-        X_tv_dirs, X_test_dirs, y_tv, y_test = train_test_split(all_video_dirs, penalty_idxs, test_size=0.1, random_state=42, stratify=penalty_idxs)
-        X_train_dirs, X_val_dirs, y_train, y_val = train_test_split(X_tv_dirs, y_tv, test_size=0.18, random_state=42, stratify = y_tv)
-
-
+        all_video_dirs = glob.glob(os.path.join(self.data_dir, "*", "*"))
+        penalty_idxs = [
+            self.CATEGORY_TO_IDX[os.path.basename(Path(x).parents[0])]
+            for x in all_video_dirs
+        ]
+        X_tv_dirs, X_test_dirs, y_tv, y_test = train_test_split(
+            all_video_dirs,
+            penalty_idxs,
+            test_size=0.1,
+            random_state=42,
+            stratify=penalty_idxs,
+        )
+        X_train_dirs, X_val_dirs, y_train, y_val = train_test_split(
+            X_tv_dirs, y_tv, test_size=0.18, random_state=42, stratify=y_tv
+        )
 
         if self.CFG.training.model == "model1":
             self.train_dataset = M1_HockeyDataset(
@@ -104,6 +119,7 @@ class HockeyDataModule(pl.LightningDataModule):
                 self.CFG["training"].max_players,
                 self.CFG["model4"].num_keypoints,
                 self.CFG["model4"].coords_per_keypoint,
+                self.CFG["training"].save_dir,
             )
             self.val_dataset = M4_HockeyDataset(
                 (X_val_dirs, y_val),
@@ -113,6 +129,7 @@ class HockeyDataModule(pl.LightningDataModule):
                 self.CFG["training"].max_players,
                 self.CFG["model4"].num_keypoints,
                 self.CFG["model4"].coords_per_keypoint,
+                self.CFG["training"].save_dir,
             )
             self.test_dataset = M4_HockeyDataset(
                 (X_test_dirs, y_test),
@@ -122,6 +139,7 @@ class HockeyDataModule(pl.LightningDataModule):
                 self.CFG["training"].max_players,
                 self.CFG["model4"].num_keypoints,
                 self.CFG["model4"].coords_per_keypoint,
+                self.CFG["training"].save_dir,
             )
         else:
             raise ValueError(f"invalid model name : {self.CFG.training.model}")
@@ -135,12 +153,9 @@ class HockeyDataModule(pl.LightningDataModule):
     def test_dataloader(self):
         return DataLoader(self.test_dataset, **self.CFG.training.test_dataloader)
 
-    def teardown(self,stage):
+    def teardown(self, stage):
         import gc
-        # del self.train_dataset.loaded_videos
-        # del self.val_dataset.loaded_videos
-        # del self.train_dataset.folders
-        # del self.val_dataset.folders
+
         gc.collect()
 
 
@@ -149,7 +164,7 @@ if __name__ == "__main__":
 
     CFG = OmegaConf.load("configs/hockey_dataset.yaml")
 
-    CFG.dataset_path = '/usr/local/data01/faskari/Key-Actor-Detection/hockey_dataset'
+    CFG.dataset_path = "dataset path"
     print("\nModel 1 Test")
     CFG.training.model = "model1"
     dm = HockeyDataModule(CFG)
@@ -174,7 +189,9 @@ if __name__ == "__main__":
     dm.prepare_data()
     dm.setup()
     for batch in dm.train_dataloader():
-        print(f"pose = {batch[0].shape} , mask = {batch[1].shape}, y = {batch[2].shape}")
+        print(
+            f"pose = {batch[0].shape} , mask = {batch[1].shape}, y = {batch[2].shape}"
+        )
         break
 
     print("\nModel 4 Test")
@@ -187,4 +204,3 @@ if __name__ == "__main__":
             f"frames = {batch[0].shape} , pose = {batch[1].shape}, y = {batch[2].shape}"
         )
         break
-

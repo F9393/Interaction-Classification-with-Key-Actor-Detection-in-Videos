@@ -7,14 +7,15 @@ from tqdm import tqdm
 import glob
 import pickle
 
-class Cache():
+
+class Cache:
     def __init__(self, do_cache: bool, use_cache: bool):
         # if both do_cache and use_cache are True, cache will be read and same cache will be written back again
         self.do_cache = do_cache
         self.use_cache = use_cache
         self.read_from_cache = False
 
-    def read(self, cache_path, message = None):
+    def read(self, cache_path, message=None):
         if self.do_cache and not os.path.exists(os.path.dirname(cache_path)):
             raise Exception(
                 f"Directory {os.path.dirname(cache_path)} not found! Create directory and re-run."
@@ -29,14 +30,19 @@ class Cache():
 
         return cache_item
 
-    def write(self, cache_item, cache_path, message = None):
-        if not self.do_cache or os.getenv("SLURM_LOCALID", '0') != '0' or self.read_from_cache: # write cache only on first gpu process
+    def write(self, cache_item, cache_path, message=None):
+        if (
+            not self.do_cache
+            or os.getenv("SLURM_LOCALID", "0") != "0"
+            or self.read_from_cache
+        ):  # write cache only on first gpu process
             return None
         else:
             with open(cache_path, "wb") as f:
                 if message is not None:
                     print(message)
-                pickle.dump(cache_item, f)  
+                pickle.dump(cache_item, f)
+
 
 def _get_video_metadata(set_paths):
     """
@@ -61,7 +67,12 @@ def _get_video_metadata(set_paths):
     all_data = []
 
     for part_path in set_paths:
-        cats = sorted([s.decode("utf-8") if type(s) == bytes else s for s in os.listdir(part_path)])[1:]
+        cats = sorted(
+            [
+                s.decode("utf-8") if type(s) == bytes else s
+                for s in os.listdir(part_path)
+            ]
+        )[1:]
         for cat in cats:
             label = int(cat) - 1
             cat_path = os.path.join(part_path, cat)  # path to category(1-8)
@@ -72,9 +83,21 @@ def _get_video_metadata(set_paths):
                 run_path = os.path.join(cat_path, run)
                 num_frames = len(glob.glob(f"{run_path}/rgb*"))
                 all_data.append((run_path, label, num_frames))
-    return all_data          
+    return all_data
 
-def read_images(folders, videos_len, num_frames, stage, resize, fold_no, cache_folds, use_cache, folds_cache_path, **kwargs):
+
+def read_images(
+    folders,
+    videos_len,
+    num_frames,
+    stage,
+    resize,
+    fold_no,
+    cache_folds,
+    use_cache,
+    folds_cache_path,
+    **kwargs,
+):
     def _read_images():
         all_video_frames = torch.zeros(len(folders), num_frames, 3, resize, resize)
 
@@ -88,7 +111,7 @@ def read_images(folders, videos_len, num_frames, stage, resize, fold_no, cache_f
                     ),
                 ]
             )
-        
+
         with tqdm(folders) as pbar:
             pbar.set_description(f"Reading {stage} fold {fold_no} images!")
 
@@ -104,28 +127,41 @@ def read_images(folders, videos_len, num_frames, stage, resize, fold_no, cache_f
                 )
                 for idx, frame_pth in enumerate(reqd_frame_pths):
                     frame = Image.open(frame_pth).convert("RGB")
-                    frame = (
-                        transform(frame) if transform is not None else frame
-                    )
+                    frame = transform(frame) if transform is not None else frame
                     loaded_frames[idx] = frame
 
                 all_video_frames[index] = loaded_frames
-            
+
         return all_video_frames
 
     cacher = Cache(cache_folds, use_cache)
     cache_path = os.path.join(
-            folds_cache_path, f"sbu_{stage}_fold={fold_no}_images.pkl"
-        )
+        folds_cache_path, f"sbu_{stage}_fold={fold_no}_images.pkl"
+    )
 
-    loaded_videos = cacher.read(cache_path, f"Reading {stage} fold={fold_no} images from cache")
+    loaded_videos = cacher.read(
+        cache_path, f"Reading {stage} fold={fold_no} images from cache"
+    )
     if loaded_videos is None:
         loaded_videos = _read_images()
-    cacher.write(loaded_videos, cache_path, f"Writing {stage} fold={fold_no} images as cache")
+    cacher.write(
+        loaded_videos, cache_path, f"Writing {stage} fold={fold_no} images as cache"
+    )
 
     return loaded_videos
 
-def read_poses(folders, videos_len, num_frames, stage, fold_no, cache_folds, use_cache, folds_cache_path, **kwargs):
+
+def read_poses(
+    folders,
+    videos_len,
+    num_frames,
+    stage,
+    fold_no,
+    cache_folds,
+    use_cache,
+    folds_cache_path,
+    **kwargs,
+):
     def _read_poses():
         all_video_poses = torch.zeros(len(folders), num_frames, 90)
         with tqdm(folders) as pbar:
@@ -145,7 +181,9 @@ def read_poses(folders, videos_len, num_frames, stage, fold_no, cache_folds, use
                 video_pose_values = torch.zeros(num_frames, 90, dtype=torch.float32)
                 for frame_idx, row in enumerate(reqd_pose_data):
                     posture_data = [x.strip() for x in row.split(",")]
-                    frame_pose_values = torch.tensor([float(x) for x in posture_data[1:]])
+                    frame_pose_values = torch.tensor(
+                        [float(x) for x in posture_data[1:]]
+                    )
                     assert (
                         len(frame_pose_values) == 90
                     ), "incorrect number of pose values"
@@ -153,25 +191,29 @@ def read_poses(folders, videos_len, num_frames, stage, fold_no, cache_folds, use
                     video_pose_values[frame_idx] = frame_pose_values
 
                 all_video_poses[index] = video_pose_values
-            
+
         return all_video_poses
 
     cacher = Cache(cache_folds, use_cache)
-    cache_path = os.path.join(
-            folds_cache_path, f"sbu_{stage}_fold={fold_no}_poses.pkl"
-        )
+    cache_path = os.path.join(folds_cache_path, f"sbu_{stage}_fold={fold_no}_poses.pkl")
 
-    loaded_poses = cacher.read(cache_path, f"Reading {stage} fold={fold_no} poses from cache")
+    loaded_poses = cacher.read(
+        cache_path, f"Reading {stage} fold={fold_no} poses from cache"
+    )
     if loaded_poses is None:
         loaded_poses = _read_poses()
-    cacher.write(loaded_poses, cache_path, f"Writing {stage} fold={fold_no} poses as cache")    
+    cacher.write(
+        loaded_poses, cache_path, f"Writing {stage} fold={fold_no} poses as cache"
+    )
 
     return loaded_poses
+
 
 class M1_SBU_Dataset(data.Dataset):
     """
     dataloader for model 1.
     """
+
     def __init__(
         self,
         set_paths,
@@ -191,7 +233,17 @@ class M1_SBU_Dataset(data.Dataset):
             zip(*_get_video_metadata(set_paths))
         )
 
-        self.loaded_videos = read_images(self.folders, self.videos_len, num_frames, stage, resize, fold_no, cache_folds, use_cache, folds_cache_path)       
+        self.loaded_videos = read_images(
+            self.folders,
+            self.videos_len,
+            num_frames,
+            stage,
+            resize,
+            fold_no,
+            cache_folds,
+            use_cache,
+            folds_cache_path,
+        )
 
     def __len__(self):
         return len(self.folders)
@@ -226,7 +278,16 @@ class M2_SBU_Dataset(data.Dataset):
         )
 
         self.keypoints_per_person = None
-        self.loaded_poses = read_poses(self.folders, self.videos_len, num_frames, stage, fold_no, cache_folds, use_cache, folds_cache_path)
+        self.loaded_poses = read_poses(
+            self.folders,
+            self.videos_len,
+            num_frames,
+            stage,
+            fold_no,
+            cache_folds,
+            use_cache,
+            folds_cache_path,
+        )
 
         if coords_per_keypoint == 2:
             idxs = torch.tensor([i for i in range(90) if (i + 1) % 3 != 0])
@@ -235,7 +296,9 @@ class M2_SBU_Dataset(data.Dataset):
         elif coords_per_keypoint == 3:
             self.keypoints_per_person = 45
         else:
-            raise Exception("invalid coords_per_keypoint in M2_SBU_Dataset! Must be either 2 or 3.")
+            raise Exception(
+                "invalid coords_per_keypoint in M2_SBU_Dataset! Must be either 2 or 3."
+            )
 
     def __len__(self):
         return len(self.folders)
@@ -275,7 +338,16 @@ class M3_SBU_Dataset(data.Dataset):
         )
 
         self.keypoints_per_person = None
-        self.loaded_poses = read_poses(self.folders, self.videos_len, num_frames, stage, fold_no, cache_folds, use_cache, folds_cache_path)
+        self.loaded_poses = read_poses(
+            self.folders,
+            self.videos_len,
+            num_frames,
+            stage,
+            fold_no,
+            cache_folds,
+            use_cache,
+            folds_cache_path,
+        )
 
         if coords_per_keypoint == 2:
             idxs = torch.tensor([i for i in range(90) if (i + 1) % 3 != 0])
@@ -284,7 +356,9 @@ class M3_SBU_Dataset(data.Dataset):
         elif coords_per_keypoint == 3:
             self.keypoints_per_person = 45
         else:
-            raise Exception("invalid coords_per_keypoint in M2_SBU_Dataset! Must be either 2 or 3.")
+            raise Exception(
+                "invalid coords_per_keypoint in M2_SBU_Dataset! Must be either 2 or 3."
+            )
 
     def __len__(self):
         return len(self.folders)
@@ -304,6 +378,7 @@ class M4_SBU_Dataset(data.Dataset):
     """
     dataloader for model 4.
     """
+
     def __init__(
         self,
         set_paths,
@@ -325,8 +400,27 @@ class M4_SBU_Dataset(data.Dataset):
 
         self.keypoints_per_person = None
 
-        self.loaded_videos = read_images(self.folders, self.videos_len, num_frames, stage, resize, fold_no, cache_folds, use_cache, folds_cache_path)       
-        self.loaded_poses = read_poses(self.folders, self.videos_len, num_frames, stage, fold_no, cache_folds, use_cache, folds_cache_path)
+        self.loaded_videos = read_images(
+            self.folders,
+            self.videos_len,
+            num_frames,
+            stage,
+            resize,
+            fold_no,
+            cache_folds,
+            use_cache,
+            folds_cache_path,
+        )
+        self.loaded_poses = read_poses(
+            self.folders,
+            self.videos_len,
+            num_frames,
+            stage,
+            fold_no,
+            cache_folds,
+            use_cache,
+            folds_cache_path,
+        )
 
         if coords_per_keypoint == 2:
             idxs = torch.tensor([i for i in range(90) if (i + 1) % 3 != 0])
@@ -335,7 +429,9 @@ class M4_SBU_Dataset(data.Dataset):
         elif coords_per_keypoint == 3:
             self.keypoints_per_person = 45
         else:
-            raise Exception("invalid coords_per_keypoint in M2_SBU_Dataset! Must be either 2 or 3.")
+            raise Exception(
+                "invalid coords_per_keypoint in M2_SBU_Dataset! Must be either 2 or 3."
+            )
 
     def __len__(self):
         return len(self.folders)
@@ -354,4 +450,3 @@ class M4_SBU_Dataset(data.Dataset):
 
         # frames : (10,3,224,224) , pose_values : (10,2,30) (if only x,y otherwise (10,2,45))
         return frames, pose_values, y
-

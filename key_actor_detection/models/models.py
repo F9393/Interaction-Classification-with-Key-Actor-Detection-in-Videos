@@ -12,13 +12,13 @@ class Model1(nn.Module):
         """
         Parameters
         ----------
-        frameLSTM: dictionary 
-            dictionary containing parameters of frame-level LSTM. 
-            Must contain 'hidden_size' key representing size of hidden_dim of LSTM. 
+        frameLSTM: dictionary
+            dictionary containing parameters of frame-level LSTM.
+            Must contain 'hidden_size' key representing size of hidden_dim of LSTM.
             'winit' and 'forget_gate_bias' keys are optional.
-        eventLSTM: dictionary 
-            dictionary containing parameters of event-level LSTM. 
-            Must contain 'hidden_size' key representing size of hidden_dim of LSTM. 
+        eventLSTM: dictionary
+            dictionary containing parameters of event-level LSTM.
+            Must contain 'hidden_size' key representing size of hidden_dim of LSTM.
             'winit' and 'forget_gate_bias' keys are optional.
         CNN_embed_dim  : int
             size of embedding layer in encoder
@@ -69,19 +69,21 @@ class Model1(nn.Module):
 
 
 class Model2(nn.Module):
-    def __init__(self, eventLSTM, num_keypoints, coords_per_keypoint, num_classes, **kwargs):
+    def __init__(
+        self, eventLSTM, num_keypoints, coords_per_keypoint, num_classes, **kwargs
+    ):
         """
         Parameters
         ----------
-        eventLSTM: dictionary 
-            dictionary containing parameters of event-level LSTM. 
-            Must contain 'hidden_size' key representing size of hidden_dim of LSTM. 
+        eventLSTM: dictionary
+            dictionary containing parameters of event-level LSTM.
+            Must contain 'hidden_size' key representing size of hidden_dim of LSTM.
             'winit' and 'forget_gate_bias' keys are optional.
         coords_per_keypoint  : int
             no. of coordinates to consider for pose (either 2 for x,y or 3 for x,y,z)
         num_classes : int
             number of output classes of model
-        
+
         """
 
         super(Model2, self).__init__()
@@ -97,7 +99,7 @@ class Model2(nn.Module):
         """
         x : shape (B,T,I)
         out : shape (B,O)
-        
+
         """
         e_out, (e_h_n, e_h_c) = self.eventLSTM(x)
 
@@ -105,7 +107,7 @@ class Model2(nn.Module):
 
         out = self.fc(e_out)
 
-        #getting the last step
+        # getting the last step
         return out[:, -1, :]
 
     def _get_parameters(self):
@@ -113,20 +115,29 @@ class Model2(nn.Module):
 
 
 class Model3(nn.Module):
-    def __init__(self, eventLSTM, num_keypoints, coords_per_keypoint, num_classes, attention_type, attention_params, **kwargs):
+    def __init__(
+        self,
+        eventLSTM,
+        num_keypoints,
+        coords_per_keypoint,
+        num_classes,
+        attention_type,
+        attention_params,
+        **kwargs,
+    ):
         """
         Parameters
         ----------
-        eventLSTM: dictionary 
-            dictionary containing parameters of event-level LSTM. 
-            Must contain 'hidden_size' key representing size of hidden_dim of LSTM. 
+        eventLSTM: dictionary
+            dictionary containing parameters of event-level LSTM.
+            Must contain 'hidden_size' key representing size of hidden_dim of LSTM.
             'winit' and 'forget_gate_bias' keys are optional.
         coords_per_keypoint  : int
             no. of coordinates to consider for pose (either 2 for x,y or 3 for x,y,z)
         num_classes : int
             number of output classes of model
         attention_type: 1 or 2
-        
+
         """
 
         super(Model3, self).__init__()
@@ -137,15 +148,17 @@ class Model3(nn.Module):
         if attention_type == 1:
             self.attention = Attention1(self.hidden_size, pose_dim)
         elif attention_type == 2:
-            self.attention = Attention2(self.hidden_size, pose_dim, attention_params,)
+            self.attention = Attention2(
+                self.hidden_size,
+                pose_dim,
+                attention_params,
+            )
         else:
             raise Exception("invalid attention type! Must be either 1 or 2.")
 
         self.eventLSTM = EventLSTM(input_size=pose_dim, **eventLSTM)
 
         # self.bn = nn.BatchNorm1d(1)
-
-
         # self.fc = nn.Sequential(
         #     nn.Linear(in_features=eventLSTM["hidden_size"], out_features=eventLSTM["hidden_size"]),
         #     nn.ReLU(),
@@ -160,7 +173,7 @@ class Model3(nn.Module):
         x : shape (B,T,P,I) (batch_size, #frames, #person, #person pose coordinates)
         mask: shape (B,T,P,I)
         out : shape (B,O)
-        
+
         """
         device = x.device
         out = torch.zeros(x.size(0), 1, self.hidden_size).to(device)
@@ -170,16 +183,18 @@ class Model3(nn.Module):
         # out = torch.zeros(x.size(0), 1, self.hidden_size).to(device)
         # hidden = torch.zeros(2, x.size(0), self.hidden_size).to(device)
         # cell = torch.zeros(2, x.size(0), self.hidden_size).to(device)
-        att_weights = torch.zeros(x.size(1),x.size(0),x.size(2)).to(device)
+        att_weights = torch.zeros(x.size(1), x.size(0), x.size(2)).to(device)
         for t in range(x.size(1)):
             if mask is not None:
-                curr_frame_mask = mask[:,t,:,0]
+                curr_frame_mask = mask[:, t, :, 0]
             else:
                 curr_frame_mask = None
             # embeddings, self.weights = self.attention(hidden[-1,:,:], x[:, t, :, :], curr_frame_mask)
-            embeddings, self.weights = self.attention(out, x[:, t, :, :], curr_frame_mask)# in the mask, all keypoints of a valid player will be set to 0. So, one flag for a player is enough instead of one flag for every keypoint of the player.
+            embeddings, self.weights = self.attention(
+                out, x[:, t, :, :], curr_frame_mask
+            )  # in the mask, all keypoints of a valid player will be set to 0. So, one flag for a player is enough instead of one flag for every keypoint of the player.
             out, (hidden, cell) = self.eventLSTM(embeddings, (hidden, cell))
-            att_weights[t,:,:] = self.weights
+            att_weights[t, :, :] = self.weights
 
         # [B,1,H] -> [B,1,O]
         out = self.fc(out)
@@ -207,15 +222,15 @@ class Model4(nn.Module):
 
         Parameters
         ----------
-        frameLSTM: dictionary 
-            dictionary containing parameters of frame-level LSTM. 
-            Must contain 'hidden_size' key representing size of hidden_dim of LSTM. 
+        frameLSTM: dictionary
+            dictionary containing parameters of frame-level LSTM.
+            Must contain 'hidden_size' key representing size of hidden_dim of LSTM.
             'winit' and 'forget_gate_bias' keys are optional.
         CNN_embed_dim  : int
             size of embedding layer in encoder
-        eventLSTM: dictionary 
-            dictionary containing parameters of event-level LSTM. 
-            Must contain 'hidden_size' key representing size of hidden_dim of LSTM. 
+        eventLSTM: dictionary
+            dictionary containing parameters of event-level LSTM.
+            Must contain 'hidden_size' key representing size of hidden_dim of LSTM.
             'winit' and 'forget_gate_bias' keys are optional.
         coords_per_keypoint  : int
             no. of coordinates to consider for pose (either 2 for x,y or 3 for x,y,z)
@@ -224,9 +239,9 @@ class Model4(nn.Module):
         attention_params:
             dictionary containing "hidden_size" key for hidden dim. size of attention mlp and
             "bias" key that takes a bool value. If true, bias is used for all layers in mlp otherwise
-            no bias in all layers of the attention mlp. 
-            
-        
+            no bias in all layers of the attention mlp.
+
+
         """
 
         super(Model4, self).__init__()
@@ -248,7 +263,10 @@ class Model4(nn.Module):
         # )
 
         self.fc = nn.Sequential(
-            nn.Linear(in_features=eventLSTM["hidden_size"], out_features=eventLSTM["hidden_size"]),
+            nn.Linear(
+                in_features=eventLSTM["hidden_size"],
+                out_features=eventLSTM["hidden_size"],
+            ),
             nn.ReLU(),
             nn.Linear(in_features=eventLSTM["hidden_size"], out_features=256),
             nn.ReLU(),
@@ -263,7 +281,7 @@ class Model4(nn.Module):
         poses : (B,T,P,I)) [batch_size, #frames, #person, person feature size]
         mask: shape (B,T,P,I)
         out : shape (B,O)
-        
+
         """
 
         # [B,T,C,H,W] -> [B,T,E]
@@ -277,21 +295,25 @@ class Model4(nn.Module):
         e_out = torch.zeros(frames.size(0), 1, self.eventLSTM_h_dim).to(device)
         e_hidden = torch.zeros(1, frames.size(0), self.eventLSTM_h_dim).to(device)
         e_cell = torch.zeros(1, frames.size(0), self.eventLSTM_h_dim).to(device)
+        att_weights = torch.zeros(poses.size(1), poses.size(0), poses.size(2)).to(
+            device
+        )
 
         for t in range(frames.size(1)):
             if mask is not None:
-                curr_frame_mask = mask[:,t,:,0]
+                curr_frame_mask = mask[:, t, :, 0]
             else:
                 curr_frame_mask = None
-            embeddings, _ = self.attention(
+            embeddings, weigths = self.attention(
                 e_out, poses[:, t, :, :], f_out[:, t, :].unsqueeze(1), curr_frame_mask
             )
             e_out, (e_hidden, e_cell) = self.eventLSTM(embeddings, (e_hidden, e_cell))
+            att_weights[t, :, :] = weigths
 
         # [B,1,H] -> [B,1,O]
         out = self.fc(e_out)
 
-        return out[:, -1, :]
+        return out[:, -1, :], att_weights
 
     def _get_parameters(self):
         return (

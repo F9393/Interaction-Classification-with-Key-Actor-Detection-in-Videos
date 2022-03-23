@@ -10,7 +10,13 @@ from tqdm import tqdm
 import shutil
 import glob
 
-from .datasets.sbu_dataset import M1_SBU_Dataset, M2_SBU_Dataset, M3_SBU_Dataset, M4_SBU_Dataset
+from .datasets.sbu_dataset import (
+    M1_SBU_Dataset,
+    M2_SBU_Dataset,
+    M3_SBU_Dataset,
+    M4_SBU_Dataset,
+)
+
 
 class SBUDataModule(pl.LightningDataModule):
     def __init__(self, CFG):
@@ -153,7 +159,7 @@ class SBUDataModule(pl.LightningDataModule):
                 "train",
                 self.CFG["model1"]["resize"],
                 fold_no,
-                **self.CFG.caching
+                **self.CFG.caching,
             )
             self.val_dataset = M1_SBU_Dataset(
                 reqd_val_set_paths,
@@ -161,7 +167,7 @@ class SBUDataModule(pl.LightningDataModule):
                 "val",
                 self.CFG["model1"]["resize"],
                 fold_no,
-                **self.CFG.caching
+                **self.CFG.caching,
             )
         elif self.CFG.training.model == "model2":
             self.train_dataset = M2_SBU_Dataset(
@@ -170,7 +176,7 @@ class SBUDataModule(pl.LightningDataModule):
                 "train",
                 self.CFG["model2"].coords_per_keypoint,
                 fold_no,
-                **self.CFG.caching
+                **self.CFG.caching,
             )
             self.val_dataset = M2_SBU_Dataset(
                 reqd_val_set_paths,
@@ -178,7 +184,7 @@ class SBUDataModule(pl.LightningDataModule):
                 "val",
                 self.CFG["model2"].coords_per_keypoint,
                 fold_no,
-                **self.CFG.caching
+                **self.CFG.caching,
             )
         elif self.CFG.training.model == "model3":
             self.train_dataset = M3_SBU_Dataset(
@@ -187,7 +193,7 @@ class SBUDataModule(pl.LightningDataModule):
                 "train",
                 self.CFG["model3"].coords_per_keypoint,
                 fold_no,
-                **self.CFG.caching
+                **self.CFG.caching,
             )
             self.val_dataset = M3_SBU_Dataset(
                 reqd_val_set_paths,
@@ -195,7 +201,7 @@ class SBUDataModule(pl.LightningDataModule):
                 "val",
                 self.CFG["model3"].coords_per_keypoint,
                 fold_no,
-                **self.CFG.caching
+                **self.CFG.caching,
             )
         elif self.CFG.training.model == "model4":
             self.train_dataset = M4_SBU_Dataset(
@@ -205,7 +211,7 @@ class SBUDataModule(pl.LightningDataModule):
                 self.CFG["model4"]["resize"],
                 self.CFG["model4"].coords_per_keypoint,
                 fold_no,
-                **self.CFG.caching
+                **self.CFG.caching,
             )
             self.val_dataset = M4_SBU_Dataset(
                 reqd_val_set_paths,
@@ -214,7 +220,7 @@ class SBUDataModule(pl.LightningDataModule):
                 self.CFG["model4"]["resize"],
                 self.CFG["model4"].coords_per_keypoint,
                 fold_no,
-                **self.CFG.caching
+                **self.CFG.caching,
             )
         else:
             raise ValueError(f"invalid model name : {self.CFG.training.model}")
@@ -225,8 +231,9 @@ class SBUDataModule(pl.LightningDataModule):
     def val_dataloader(self):
         return DataLoader(self.val_dataset, **self.CFG.training.val_dataloader)
 
-    def teardown(self,stage):
+    def teardown(self, stage):
         import gc
+
         del self.train_dataset.loaded_videos
         del self.val_dataset.loaded_videos
         del self.train_dataset.folders
@@ -276,4 +283,3 @@ if __name__ == "__main__":
             f"frames = {batch[0].shape} , pose = {batch[1].shape}, y = {batch[2].shape}"
         )
         break
-
