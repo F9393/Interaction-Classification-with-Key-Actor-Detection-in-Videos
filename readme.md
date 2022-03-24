@@ -2,6 +2,8 @@
 
 This repository is the implementation of our action recognition model with special attention on key players involved in the action. Many activities in real life take place around many people, however only a few are actually involved in the action. We apply our attention based model to classify penalties in Ice-Hockey games, which is highly representative of the few-key, many-player scenario. 
 
+###Note: our hockey dataset will be released soon
+
 ## Installation
 1. Clone this repository. 
 	```
@@ -24,12 +26,12 @@ Four models have been implemented for activity recognition where each model buil
 
 Model 1 - Only frame level features <br />
 Model 2 - Only averaged pose features <br />
-Model 3 - Only weighted pose features <br />
+Model 3 - Only weighted pose features (using two types of attention mechanism) <br />
 Model 4 - Frame level features + Weighted pose features <br />
 
 ## Datasets
 - [x] SBU Kinect Dataset
-- [x] Hockey Dataset
+- [x] Hockey Dataset (will be released soon)
 
 Hockey dataset directory structure - 
 
@@ -93,3 +95,8 @@ The hyperparameters of the model are optimized using the Ax optimization tool wh
 	sbatch scripts/optimize_slurm.sh
 	```
 	Trials are evaluated sequentially with each trial executed on multiple GPUs. Presently, simultaneous evalutation of multiple trials on multiple GPUs is not supported.
+
+## Data Augmentation
+
+We used [imgaug](https://github.com/aleju/imgaug)  for image and keypoint augmentation.
+
