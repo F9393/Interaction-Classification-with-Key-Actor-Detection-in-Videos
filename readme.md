@@ -1,8 +1,14 @@
-# Key Actor Detection
+# Interaction Classification With Key Actor Detection In Videos
 
-This repository is the implementation of our action recognition model with special attention on key players involved in the action. Many activities in real life take place around many people, however only a few are actually involved in the action. We apply our attention based model to classify penalties in Ice-Hockey games, which is highly representative of the few-key, many-player scenario. 
+## Paper accepted at the CVsports Workshop, CVPR'22.
 
-###Note: our hockey dataset will be released soon
+### Note: Our hockey dataset will be released soon
+
+This repository contains the implementation of our convolutional recurrent neural network for action recognition and key player identification. Many activities in real life take place around many people, however only a few are actually involved in the action. With the help of a suitable attention mechanism inside our action recognition model, we are able to identify the key players involved in the penalty without explicit annotations.
+
+| ![Our model correctly distributes the attention weights according to the importance of the player involved in the penalty. Players directly involved in the penalty are given the highest attention weights. In cases whe](figures/result.png) | 
+|:--:| 
+| Link between the attention performance and classification accuracy. In figures (a) and (b), our model correctly gives more attention to the 'key' players (the referee who is not involved in the penalty is given almost zero weight) and is able to classify the penalty correctly. In figures (c) and (d), where our model makes an incorrect prediction, we also notice that the attention weight is more for the non-key players. |
 
 ## Installation
 1. Clone this repository. 
