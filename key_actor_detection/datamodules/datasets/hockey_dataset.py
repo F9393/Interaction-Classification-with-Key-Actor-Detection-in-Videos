@@ -103,8 +103,7 @@ class PoseReader:
                             self.mask[
                                 frame_no, int(player_no[1:]), :
                             ] = 0  # if mask=0, means do not mask these values
-                self.poses = np.delete(self.poses, obj=0, axis=1)
-                self.mask = np.delete(self.mask, obj=0, axis=1)
+
                 poses_and_masks[penalty_dir] = (self.poses, self.mask)
 
         """

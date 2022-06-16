@@ -48,83 +48,41 @@ class KeyActorDetection(pl.LightningModule):
         self.logger.log_hyperparams(self.CFG)
 
     def training_step(self, batch, batch_idx):
-
         *inps, y = batch
-        y = y.view(
-            -1,
-        )
-        out, weights = self.model(*inps)
+        y = y.view(-1,)
+        out,weights = self.model(*inps)
         loss = F.cross_entropy(out, y)
         y_pred = torch.argmax(out, axis=1)
+        # accumulate preds as batches are processed on this process
         self.train_accuracy(y_pred, y)
 
-        self.log(
-            "train_loss",
-            loss,
-            sync_dist=False,
-            rank_zero_only=True,
-            on_step=True,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-        )
-        self.log(
-            "train_acc", self.train_accuracy, on_step=True, on_epoch=True, logger=False
-        )
+        # loss from all processes are synced,averaged and then plotted.
+        # As rank_zero_only=True, only rank 0 process will log this value.
+        self.log("train_loss",loss,sync_dist=True,rank_zero_only=True)
+
         return loss
 
     def training_epoch_end(self, train_step_outputs):
-
-        self.log(
-            "train_epoch_accuracy", self.train_accuracy, logger=False, prog_bar=True
-        )
-        # self.logger.log_metrics({"train_acc_epoch": self.train_accuracy},
-        #                         step=self.trainer.current_epoch)
+        # If passing logger=True in below log(), then x-axis labels will use step counts and not epoch counts. 
+        # To remedy, I call logger.log_metrics() separately with correct epoch label.
+        # Also, compute() reduces accumulated preds on each process which is reset() before next epoch starts.
+        self.log('train_acc_epoch',  self.train_accuracy.compute(), logger=False, prog_bar=True)
+        self.logger.log_metrics({"train_acc_epoch":  self.train_accuracy.compute().item()}, step = self.trainer.current_epoch)
+        self.train_accuracy.reset()
 
     def validation_step(self, batch, batch_idx):
-
         *inps, y = batch
-        y = y.view(
-            -1,
-        )
-        out, weights = self.model(*inps)
+        y = y.view(-1,)
+        out,weights = self.model(*inps)
         loss = F.cross_entropy(out, y).item()
         y_pred = torch.argmax(out, axis=1)
         self.val_accuracy(y_pred, y)
 
-        self.log(
-            "val_acc", self.val_accuracy, on_step=False, on_epoch=True, logger=False
-        )
-        # accuracy of rank 0 process (logs called only on rank 0) . Call to self.accuracy() needed to accumulate batch metrics.
-        self.log(
-            "val_loss_epoch",
-            loss,
-            logger=True,
-            on_step=False,
-            on_epoch=True,
-            sync_dist=False,
-            rank_zero_only=True,
-            prog_bar=True,
-        )
-
     def validation_epoch_end(self, val_step_outputs):
-
-        self.log("val_acc_epoch", self.val_accuracy, logger=False, prog_bar=True)
-        # self.logger.log_metrics({"val_acc_epoch": self.val_accuracy}, step=self.trainer.current_epoch)
-        # self.best_val_acc = max(self.best_val_acc, self.val_accuracy.item())
-
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(
-            self.model._get_parameters(),
-            lr=self.CFG.training.learning_rate,
-            weight_decay=self.CFG.training.wd,
-        )
-
-        return optimizer
-
-        # return [optimizer], [{"scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer),
-        #                      "mode": max, "monitor": "val_acc", "factor": 0.5, "patience": 50, "threshold": 0.00,
-        #                       "verbose": True}]
+        self.log('val_acc_epoch', self.val_accuracy.compute(), logger=False, prog_bar=True)
+        self.logger.log_metrics({"val_acc_epoch": self.val_accuracy.compute().item()}, step = self.trainer.current_epoch)
+        self.best_val_acc = max(self.best_val_acc, self.val_accuracy.compute().item())
+        self.val_accuracy.reset()
 
     def test_step(self, batch, batch_idx):
 
@@ -137,23 +95,10 @@ class KeyActorDetection(pl.LightningModule):
         y_pred = torch.argmax(out, axis=1)
         self.test_accuracy(y_pred, y)
 
-        self.log(
-            "test_acc", self.test_accuracy, on_step=True, on_epoch=True, logger=False
-        )
-        # accuracy of rank 0 process (logs called only on rank 0) . Call to self.accuracy() needed to accumulate batch metrics.
-        self.log(
-            "test_loss_epoch",
-            loss,
-            logger=True,
-            on_step=True,
-            on_epoch=False,
-            sync_dist=False,
-            rank_zero_only=True,
-        )
+        # as on_epoch=True, losses at various time steps will be accumulated and later reduced at the end of epoch
+        self.log("test_loss_epoch", loss, sync_dist=True, logger=True, on_step=False, on_epoch=True)
 
-        '''
-        for attention visualziation
-        '''
+        #for attention visualziation
         # for sample_data in range(out.shape[0]):
         #     save_dict = {}
         #     weight = weights[:, sample_data, :].tolist()
@@ -173,10 +118,17 @@ class KeyActorDetection(pl.LightningModule):
         #         json.dump(save_dict, fo, indent=4)
 
     def test_epoch_end(self, test_step_outputs):
+        self.log('test_acc_epoch', self.test_accuracy.compute(), logger=False, prog_bar=True)
+        self.logger.log_metrics({"test_acc_epoch": self.test_accuracy.compute().item()}, step = self.trainer.current_epoch)
+        self.test_accuracy.reset()
 
-        self.log("test_acc_epoch", self.test_accuracy, logger=False, prog_bar=True)
-        # self.logger.log_metrics({"test_acc_epoch": self.test_accuracy},
-        #                         step=self.trainer.current_epoch)
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(
+            self.model._get_parameters(),
+            lr=self.CFG.training.learning_rate,
+            weight_decay=self.CFG.training.wd,
+        )
+        return optimizer
 
 
 def train(CFG):
@@ -205,7 +157,7 @@ def train(CFG):
             )
             checkpoint_callback = ModelCheckpoint(
                 dirpath=None,
-                monitor="val_acc",
+                monitor="val_acc_epoch",
                 save_top_k=1 if CFG.training.save_dir else 0,
                 save_last=True if CFG.training.save_dir else False,
                 save_weights_only=False,
@@ -215,7 +167,7 @@ def train(CFG):
             )
 
             earlystop_callback = EarlyStopping(
-                monitor="val_acc",
+                monitor="val_acc_epoch",
                 mode="max",
                 min_delta=0.00,
                 patience=CFG.training.patience,
@@ -229,7 +181,7 @@ def train(CFG):
                 callbacks=[checkpoint_callback, earlystop_callback],
                 logger=mlf_logger,
                 weights_summary="top",
-                log_every_n_steps=4,
+                log_every_n_steps=1,
                 deterministic=CFG.deterministic.set,
                 accelerator="ddp"
                 if CFG.gpus is not None and len(CFG.gpus) > 1
